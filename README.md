@@ -261,7 +261,8 @@ report at a time), with no taps lost instead of up to 4 in 10. When Steam reads 
 
 ## Installing
 
-1. Download the APK from the latest **Build APK** run on the `sdl3droiddeck` branch (Actions tab).
+1. Download `SDL3DroidDeck.apk` from the newest release on the **Releases** page (every successful build is published
+   there by itself).
 2. Install it over SDL3Deck (or DroidDeck): same app, your games, prefixes and settings stay.
 3. **Uninstall the separate SDL3Bridge app** (SDL3BridgeDroidDeck). It is built in now, and two copies would fight
    over the same USB controller.
@@ -288,8 +289,10 @@ report at a time), with no taps lost instead of up to 4 in 10. When Steam reads 
 
 ### Setting the repo up (once)
 
-- `main` holds this README, `LICENSE`, `.github/workflows/sync.yml` (the daily sync) and `.github/workflows/build.yml`
-  (only so *Build APK* can be started on the build branch). The APK is built on `sdl3droiddeck`, which the sync fills.
+- `main` holds this README, `LICENSE`, `.github/workflows/sync.yml` (the daily sync), `.github/workflows/build.yml`
+  (only so *Build APK* can be started on the build branch) and `.github/workflows/publish.yml` (each successful build
+  becomes a release with `SDL3DroidDeck.apk`; the newest 10 are kept). The APK is built on `sdl3droiddeck`, which the
+  sync fills.
 - Repo secret `SYNC_PAT`: a GitHub token with **repo** + **workflow** scope (GitHub doesn't let the built-in token
   push workflow files). Optional: `DOCKERHUB_USER` / `DOCKERHUB_TOKEN`, so the build pulls its Debian image from
   Docker Hub signed in.

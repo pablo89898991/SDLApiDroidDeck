@@ -1,0 +1,99 @@
+# Publishes each successful SDL3DroidDeck build as a GitHub Release (the APK as SDL3DroidDeck.apk), so it can be
+# downloaded from the repo's Releases page instead of an Actions artifact (those expire after 30 days).
+# Runs by itself when "Build APK" succeeds on the build branch; "Run workflow" publishes the newest successful build
+# (or the run you name). Keeps the newest KEEP releases. To publish only by hand: remove the workflow_run trigger.
+name: Publish release
+
+on:
+  workflow_run:
+    workflows: ["Build APK"]
+    types: [completed]
+    branches: [sdl3droiddeck]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Build APK run ID to publish (empty = the newest successful one)
+        default: ''
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  BUILD_BRANCH: sdl3droiddeck
+  KEEP: 10
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Which build
+        run: |
+          set -euo pipefail
+          run="${{ github.event.workflow_run.id || inputs.run_id }}"
+          if [ -z "$run" ]; then
+            run=$(gh run list --workflow build.yml --branch "$BUILD_BRANCH" --status success --limit 1 \
+              --json databaseId --jq '.[0].databaseId // empty')
+          fi
+          [ -n "$run" ] || { echo "::error::no successful Build APK run on $BUILD_BRANCH"; exit 1; }
+          read -r number sha < <(gh run view "$run" --json number,headSha --jq '"\(.number) \(.headSha)"')
+          echo "RUN=$run" >> "$GITHUB_ENV"
+          echo "TAG=build-$number" >> "$GITHUB_ENV"
+          echo "SHA=$sha" >> "$GITHUB_ENV"
+          echo "Build APK run $run (#$number) on $sha"
+
+      - name: Already published?
+        id: exists
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "$TAG is published already."
+          fi
+
+      - name: Download the APK
+        if: steps.exists.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          gh run download "$RUN" -n droiddeck-apk -D apk
+          apk=$(find apk -name '*.apk' | head -1)
+          [ -n "$apk" ] || { echo "::error::the droiddeck-apk artifact has no APK"; exit 1; }
+          cp "$apk" SDL3DroidDeck.apk
+          ls -l SDL3DroidDeck.apk
+
+      - name: Publish
+        if: steps.exists.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          title=$(gh api "repos/$GH_REPO/commits/$SHA" --jq '.commit.message' | head -1)
+          sum=$(sha256sum SDL3DroidDeck.apk | cut -d' ' -f1)
+          {
+            echo "$title"
+            echo
+            echo "**Install:** download \`SDL3DroidDeck.apk\` below and install it over SDL3Deck / an earlier SDL3DroidDeck"
+            echo "(same app: your games and settings stay). The separate SDL3Bridge app is not needed: it is built in."
+            echo
+            echo "SHA-256: \`$sum\`"
+            echo
+            echo "Built by [Build APK #${TAG#build-}](https://github.com/$GH_REPO/actions/runs/$RUN) from \`${SHA:0:7}\`."
+          } > notes.md
+          gh release create "$TAG" SDL3DroidDeck.apk --target "$SHA" --title "SDL3DroidDeck ${TAG#build-}" \
+            --notes-file notes.md --latest
+
+      - name: Keep the newest releases
+        if: steps.exists.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          gh release list --limit 200 --json tagName,createdAt \
+            --jq 'map(select(.tagName | startswith("build-"))) | sort_by(.createdAt) | reverse | .[(env.KEEP | tonumber):] | .[].tagName' |
+          while read -r old; do
+            echo "removing $old"
+            gh release delete "$old" --yes --cleanup-tag
+          done

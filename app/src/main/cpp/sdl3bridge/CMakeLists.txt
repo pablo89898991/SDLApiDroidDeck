@@ -7,6 +7,9 @@ set(SDL_TESTS OFF CACHE BOOL "" FORCE)
 set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SDL_ANDROID_JAR OFF CACHE BOOL "" FORCE)
 set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
+# The bridge draws nothing (SDL3 runs headless for controllers): no OpenGL ES, so libSDL3.so needs no libGLESv1_CM.so,
+# which DroidDeck's APK check (tools/release/check_android_libraries.py) does not count as a system library.
+set(SDL_OPENGLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(SDL)
 add_library(main SHARED src/main.c)
 target_link_libraries(main PRIVATE SDL3::SDL3 log)

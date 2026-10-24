@@ -1,0 +1,21 @@
+# Only here so "Build APK" can be started on the build branch: GitHub offers a workflow for manual runs only when a
+# file of that name is on the default branch. A run started on the build branch (sdl3droiddeck) uses that branch's
+# own build.yml -- upstream DroidDeck's real build. The sync workflow starts it after each change.
+name: Build APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      rebuild_preloads:
+        description: Rebuild preloads instead of reusing the approved binary snapshot
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  note:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "Nothing to build on main. Start Build APK on the sdl3droiddeck branch (Use workflow from -> sdl3droiddeck)."

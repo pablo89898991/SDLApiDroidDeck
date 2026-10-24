@@ -1,0 +1,780 @@
+name: Build APK
+run-name: ${{ github.event_name == 'pull_request' && format('building pr {0} on {1}', github.event.pull_request.number, github.event.pull_request.head.sha) || format('building {0} on {1}', github.ref_name, github.sha) }}
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE'
+      - '.gitignore'
+  pull_request:
+    branches: [ main ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE'
+      - '.gitignore'
+  workflow_dispatch:
+    inputs:
+      rebuild_preloads:
+        description: Rebuild preloads instead of reusing the approved binary snapshot
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+concurrency:
+  group: build-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  source:
+    name: Pin source tree
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      base-sha: ${{ steps.merge.outputs.base-sha || steps.trusted.outputs.base-sha }}
+      tree-sha: ${{ steps.source.outputs.tree-sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Pin and merge the APK source
+        id: merge
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          echo "base-sha=$(git rev-parse origin/main)" >> "$GITHUB_OUTPUT"
+          git config user.name "ci"
+          git config user.email "ci@users.noreply.github.com"
+          git merge --no-ff --no-edit origin/main
+      - name: Resolve trusted manifest base
+        id: trusted
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          echo "base-sha=$(git rev-parse origin/main)" >> "$GITHUB_OUTPUT"
+      - name: Record pinned source tree
+        id: source
+        run: echo "tree-sha=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
+
+  xbox:
+    name: Xbox ARM64 backend
+    needs: source
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Merge the pinned APK base
+        if: github.event_name == 'pull_request'
+        env:
+          BUILD_BASE_SHA: ${{ needs.source.outputs.base-sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BUILD_BASE_SHA"
+          git config user.name "ci"
+          git config user.email "ci@users.noreply.github.com"
+          git merge --no-ff --no-edit FETCH_HEAD
+      - name: Verify pinned source tree
+        env:
+          SOURCE_TREE: ${{ needs.source.outputs.tree-sha }}
+        run: test "$(git rev-parse 'HEAD^{tree}')" = "$SOURCE_TREE"
+      - name: Plan component identities
+        id: plan
+        run: python3 tools/components/prepare.py plan
+      - uses: actions/cache@v4
+        id: xbox-cache
+        with:
+          path: |
+            app/src/main/assets/linuxfs/usr/local/lib/droiddeck-xbox
+            app/build/xbox/xodus-droiddeck-source.tar.xz
+            app/build/xbox/runtime/*-source.tar.xz
+          key: xbox-v2-${{ steps.plan.outputs.xbox }}
+      - name: Build Xbox backend
+        if: steps.xbox-cache.outputs.cache-hit != 'true'
+        run: python3 tools/components/prepare.py xbox
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xbox-arm64
+          path: app/src/main/assets/linuxfs/usr/local/lib/droiddeck-xbox
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xbox-corresponding-source
+          path: |
+            app/build/xbox/xodus-droiddeck-source.tar.xz
+            app/build/xbox/runtime/*-source.tar.xz
+          if-no-files-found: error
+          retention-days: 14
+
+  components:
+    name: Prepare verified components
+    needs: source
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Merge the pinned APK base
+        if: github.event_name == 'pull_request'
+        env:
+          BUILD_BASE_SHA: ${{ needs.source.outputs.base-sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BUILD_BASE_SHA"
+          git config user.name "ci"
+          git config user.email "ci@users.noreply.github.com"
+          git merge --no-ff --no-edit FETCH_HEAD
+      - name: Verify pinned source tree
+        env:
+          SOURCE_TREE: ${{ needs.source.outputs.tree-sha }}
+        run: test "$(git rev-parse 'HEAD^{tree}')" = "$SOURCE_TREE"
+      - name: Resolve the pinned Android NDK
+        run: bash tools/ci/resolve-ndk.sh
+
+      - name: Plan component identities
+        id: plan
+        run: python3 tools/components/prepare.py plan
+      - name: Cache remaining Linux runtime assets
+        id: preloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/src/main/assets/linuxfs
+            !app/src/main/assets/linuxfs/usr/local/lib/droiddeck-comet
+            !app/src/main/assets/linuxfs/usr/local/lib/droiddeck-xbox
+            !app/src/main/assets/linuxfs/i386/libblsession.so
+            !app/src/main/assets/linuxfs/i386/libfakeinput.so
+            !app/src/main/assets/linuxfs/i386/libfaultreport.so
+            !app/src/main/assets/linuxfs/libblaudit.so
+            !app/src/main/assets/linuxfs/libblfastpath.so
+            !app/src/main/assets/linuxfs/libblsession.so
+            !app/src/main/assets/linuxfs/libfakeinput.so
+            !app/src/main/assets/linuxfs/libssbs.so
+            !app/src/main/assets/linuxfs/usr/local/bin/droiddeck-clipboard
+            !app/src/main/assets/linuxfs/x86_64/libblsession.so
+            !app/src/main/assets/linuxfs/x86_64/libfakeinput.so
+            !app/src/main/assets/linuxfs/x86_64/libfaultreport.so
+            !app/src/main/assets/linuxfs/x86_64/libvulkan-thunk.so
+            !app/src/main/assets/linuxfs/x86_64/libwebkitinput.so
+          key: runtime-v9-${{ steps.plan.outputs.runtime }}
+
+      - name: Cache PulseAudio 13.0 source
+        id: pa-src
+        uses: actions/cache@v4
+        with:
+          path: pa13
+          key: pulseaudio-src-${{ steps.plan.outputs.pulseaudio-source }}
+      - name: Cache proot
+        id: proot
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/src/main/jniLibs/arm64-v8a/libproot.so
+            app/src/main/jniLibs/arm64-v8a/libproot-loader.so
+          key: proot-v2-${{ steps.plan.outputs.proot }}
+      - name: Cache GOG Galaxy companion
+        id: comet
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/assets/linuxfs/usr/local/lib/droiddeck-comet
+          key: comet-v2-${{ steps.plan.outputs.comet }}
+
+      - name: "SDL3Deck: downloads retry instead of hanging"
+        run: printf 'connect-timeout = 30\nspeed-limit = 2048\nspeed-time = 60\n' > "$HOME/.curlrc"
+
+      - name: Restore verified preload snapshots
+        id: component-preloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE_PRELOAD_REBUILD: ${{ inputs.rebuild_preloads || 'false' }}
+          COMPONENT_TRUSTED_BASE: ${{ needs.source.outputs.base-sha }}
+        run: python3 tools/components/prepare.py preload-snapshot
+
+      - name: Prepare required Linux build tools once
+        env:
+          COMPONENTS_TO_BUILD: >-
+            ${{ steps.preloads.outputs.cache-hit != 'true' && 'runtime' || '' }}
+            ${{ steps.component-preloads.outputs.arm64 != 'true' && 'arm64-preloads' || '' }}
+            ${{ steps.comet.outputs.cache-hit != 'true' && 'comet' || '' }}
+        run: python3 tools/components/prepare.py tools
+
+      - name: Build changed ARM64 preloads
+        if: steps.component-preloads.outputs.arm64 != 'true'
+        run: python3 tools/components/prepare.py arm64-preloads
+
+      - name: Prepare remaining Linux runtime assets
+        if: steps.preloads.outputs.cache-hit != 'true'
+        run: python3 tools/components/prepare.py runtime
+
+      - name: Log in to Docker Hub (lifts the registry pull limit)
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USER }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "$DH_USER" ] && [ -n "$DH_TOKEN" ]; then
+            echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
+          else
+            echo "No Docker Hub secrets set; using anonymous pull."
+          fi
+
+      - name: Fetch the Debian image the preloads build in
+        if: steps.component-preloads.outputs.x86 != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/components/prepare.py debian-image
+
+      - name: Build the x86 preloads FEX guests load (glibc 2.31)
+        if: steps.component-preloads.outputs.x86 != 'true'
+        run: python3 tools/components/prepare.py x86-preloads
+
+      - name: Bundle the droiddeck-esync packs
+        run: python3 tools/components/prepare.py esync
+
+      - name: Fetch PulseAudio 13.0 source
+        if: steps.pa-src.outputs.cache-hit != 'true'
+        run: python3 tools/components/prepare.py pulseaudio-source
+
+      - name: Fetch DirectAudio (tools/directaudio/release.env)
+        run: python3 tools/components/prepare.py directaudio
+
+      - name: Build the AAudio sink into the audio bundle
+        run: python3 tools/components/prepare.py audio
+
+      - name: Build proot
+        if: steps.proot.outputs.cache-hit != 'true'
+        run: python3 tools/components/prepare.py proot
+
+      - name: Check the preloads
+        run: |
+          set -euo pipefail
+          bash tools/linuxfs/check-preloads.sh app/src/main/assets/linuxfs
+
+      - name: Build GOG Galaxy companion
+        if: steps.comet.outputs.cache-hit != 'true'
+        run: python3 tools/components/prepare.py comet
+
+      - name: Prepare graphics driver variants
+        run: python3 tools/quest/build-driver.py "$ANDROID_HOME/ndk/$NDK_VERSION"
+      - name: Record and pack prepared components
+        run: python3 tools/components/prepare.py pack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prepared-components
+          path: app/build/prepared-components.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  build:
+    needs: [source, components, xbox]
+    name: Compile APK and Android tests
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      variants: ${{ steps.variants.outputs.list }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check human authorship
+        if: github.repository == 'Droid-Deck/droiddeck'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = pull_request ]; then
+            git fetch --no-tags origin main
+            base=$(git merge-base origin/main HEAD)
+            checker="$RUNNER_TEMP/droiddeck-check-authorship.py"
+            git show origin/main:tools/release/check_authorship.py > "$checker"
+            python3 "$checker" "$base..HEAD" --event "$GITHUB_EVENT_PATH"
+          elif [ "$EVENT_NAME" = push ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ]; then
+            python3 tools/release/check_authorship.py "$BEFORE..HEAD"
+          else
+            python3 tools/release/check_authorship.py HEAD
+          fi
+
+      - name: The packages a signed build ships as
+        id: variants
+        run: echo "list=$(awk '!/^#/ && NF { print $1 }' tools/release/variants.txt | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+
+      - name: No private key in the tree
+        run: |
+          set -euo pipefail
+          keys=$(git ls-files | grep -iE '\.(jks|keystore|p12|pfx|pk8|pem|key)$' | grep -vx 'keystore/testkey.p12' || true)
+          if [ -n "$keys" ]; then
+            echo "::error::a private key is committed - remove it from the history and make a new one: $keys"
+            exit 1
+          fi
+
+      - name: Version bumps are isolated
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          base=$(git merge-base origin/main HEAD)
+          diff=$(git diff -U0 "$base..HEAD" -- app/build.gradle)
+          grep -Eq '^[+-][[:space:]]*version(Code|Name)[[:space:]]' <<<"$diff" || exit 0
+          other_files=$(git diff --name-only "$base..HEAD" | grep -v '^app/build.gradle$' || true)
+          other_gradle=$(grep -E '^[+-]' <<<"$diff" | grep -Ev '^(---|\+\+\+)' | grep -Ev '^[+-][[:space:]]*version(Code|Name)[[:space:]]' || true)
+          if [[ -n "$other_files" || -n "$other_gradle" ]]; then
+            echo "::error::versionCode/versionName changes must be isolated in their own PR"
+            echo "A version PR may only change the versionCode/versionName lines in app/build.gradle." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Merge onto main, or say what conflicts
+        if: github.event_name == 'pull_request'
+        env:
+          BUILD_BASE_SHA: ${{ needs.source.outputs.base-sha }}
+        run: |
+          set -uo pipefail
+          git config user.name "ci"
+          git config user.email "ci@users.noreply.github.com"
+          git fetch --no-tags origin main
+          git fetch --no-tags origin "$BUILD_BASE_SHA"
+          BASE=$(git rev-parse --short FETCH_HEAD)
+          HEAD=$(git rev-parse --short HEAD)
+          if git merge --no-ff --no-edit FETCH_HEAD >/tmp/merge.out 2>&1; then
+            {
+              echo "###  Mergeable"
+              echo
+              echo "\`$HEAD\` merges cleanly onto main (\`$BASE\`). What follows was built from the merged result."
+            } > /tmp/pr-merge.md
+            cat /tmp/pr-merge.md >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          FILES=$(git diff --name-only --diff-filter=U)
+          if [ -z "$FILES" ]; then
+            {
+              echo "### ERROR: Could not merge onto main (\`$BASE\`)"
+              echo
+              echo '```'
+              cat /tmp/merge.out
+              echo '```'
+            } > /tmp/pr-merge.md
+            cat /tmp/pr-merge.md >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::git could not merge main: $(head -3 /tmp/merge.out | tr '\n' ' ')"
+            exit 1
+          fi
+          {
+            echo "### ERROR: Not mergeable - conflicts with main (\`$BASE\`)"
+            echo
+            echo "Files that conflict:"
+            echo
+            for f in $FILES; do echo "- \`$f\`"; done
+            echo
+            echo "Each conflicting hunk, as git leaves it: \`<<<<<<< HEAD\` is this pull request, \`>>>>>>> origin/main\` is main."
+            echo
+            for f in $FILES; do
+              echo "<details><summary><code>$f</code></summary>"
+              echo
+              echo '```'
+              awk '/^<<<<<<< /{p=1} p{print} /^>>>>>>> /{p=0}' "$f" | head -300
+              echo '```'
+              echo "</details>"
+              echo
+            done
+            echo "Not built: rebase or merge main into the branch and push again."
+          } > /tmp/pr-merge.md
+          cat /tmp/pr-merge.md >> "$GITHUB_STEP_SUMMARY"
+          git merge --abort || true
+          echo "::error::the pull request conflicts with main: $(echo $FILES | tr '\n' ' ')"
+          exit 1
+
+      - name: Verify backend and APK source match
+        env:
+          XBOX_SOURCE_TREE: ${{ needs.source.outputs.tree-sha }}
+        run: test "$(git rev-parse 'HEAD^{tree}')" = "$XBOX_SOURCE_TREE"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          cache-cleanup: on-success
+
+      - name: Resolve the pinned Android NDK
+        run: bash tools/ci/resolve-ndk.sh
+
+      - name: Set the APK build label
+        id: build-label
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BUILD_REF: ${{ github.ref_name }}
+          BUILD_SHA: ${{ github.sha }}
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            tree_state=dirty
+          else
+            tree_state=clean
+          fi
+          echo "DROIDDECK_BUILD_TREE_STATE=$tree_state" >> "$GITHUB_ENV"
+          if [[ -n "$PR_NUMBER" ]]; then
+            label="pr${PR_NUMBER} at ${PR_HEAD_SHA:0:7}"
+          else
+            label="${BUILD_REF} at ${BUILD_SHA:0:7}"
+          fi
+          echo "label=$label" >> "$GITHUB_OUTPUT"
+          echo "DROIDDECK_SOURCE_COMMIT=${PR_HEAD_SHA:-$BUILD_SHA}" >> "$GITHUB_ENV"
+          echo "DROIDDECK_PR_NUMBER=${PR_NUMBER:-0}" >> "$GITHUB_ENV"
+          echo "Build: \`$label\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Rust toolchain for the store engines (aarch64-linux-android)
+        id: rust
+        run: |
+          set -euo pipefail
+          rustup target add aarch64-linux-android
+          echo "rustc=$(rustc -V | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+          rustc -V; cargo -V
+
+      - name: Cache cargo registry and the store engines' target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            ~/.cargo/bin/cargo-ndk
+            app/src/main/rust/stores/target
+          key: stores-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.NDK_VERSION }}-${{ steps.rust.outputs.rustc }}-${{ hashFiles('app/src/main/rust/stores/Cargo.lock') }}-${{ hashFiles('app/src/main/rust/stores/src/**', 'app/src/main/rust/stores/Cargo.toml', 'app/src/main/rust/stores/build.rs', 'app/src/main/rust/stores/.cargo/**', 'app/build.gradle') }}
+          restore-keys: |
+            stores-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.NDK_VERSION }}-${{ steps.rust.outputs.rustc }}-${{ hashFiles('app/src/main/rust/stores/Cargo.lock') }}-
+            stores-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.NDK_VERSION }}-${{ steps.rust.outputs.rustc }}-
+
+      - name: cargo-ndk
+        run: |
+          set -euo pipefail
+          command -v cargo-ndk >/dev/null || cargo install cargo-ndk --locked
+          cargo ndk --version
+
+      - name: Cache the CMake build tree
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/.cxx
+            app/build/intermediates/cxx
+          key: cxx-${{ env.NDK_VERSION }}-${{ hashFiles('app/src/main/cpp/**', 'tools/vr/src/xr_*.h') }}
+          restore-keys: |
+            cxx-${{ env.NDK_VERSION }}-
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prepared-components
+          path: app/build
+      - name: Verify and unpack prepared components
+        env:
+          SOURCE_TREE: ${{ needs.source.outputs.tree-sha }}
+        run: python3 tools/components/prepare.py unpack --tree "$SOURCE_TREE"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: xbox-arm64
+          path: app/src/main/assets/linuxfs/usr/local/lib/droiddeck-xbox
+
+      - name: Cache checksum-pinned pack inputs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/droiddeck-pack-inputs
+          key: pack-inputs-v1-${{ hashFiles('tools/packs/build.sh', 'tools/packs/fetch-verified.sh', 'tools/packs/tracking/release.env') }}
+          restore-keys: pack-inputs-v1-
+      - name: Build the add-on packs
+        run: bash tools/packs/build.sh app/build/packs
+
+      - name: Build
+        id: build
+        env:
+          DROIDDECK_BUILD_LABEL: ${{ steps.build-label.outputs.label }}
+          SGDB_API_KEY: ${{ secrets.SGDB_API_KEY }}
+        run: |
+          set -o pipefail
+          python3 tools/release/runtime_inputs.py record
+          ./gradlew assembleRelease --console=plain -PndkVersion="$NDK_VERSION" 2>&1 | tee /tmp/build.log
+          python3 tools/release/check_session_assets.py app/build/outputs/apk/release/app-release.apk
+          python3 tools/release/runtime_inputs.py apk app/build/outputs/apk/release/app-release.apk
+
+      - name: Check the store engines' library
+        run: |
+          set -euo pipefail
+          NDK="${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK_HOME:-$ANDROID_NDK_ROOT}}"
+          python3 tools/release/check_android_libraries.py app/build/outputs/apk/release/app-release.apk \
+            --readelf "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          git diff --stat -- app/src/main/rust/stores/Cargo.lock
+          git diff --exit-code -- app/src/main/rust/stores/Cargo.lock \
+            || { echo "::error::Cargo.lock changed during the build; commit the regenerated lockfile (uploaded as stores-cargo-lock)"; exit 1; }
+
+      - name: Store engines host unit tests
+        timeout-minutes: 10
+        continue-on-error: true
+        run: |
+          cd app/src/main/rust/stores
+          cargo test --locked 2>&1 | tail -60
+
+      - name: Upload the regenerated Cargo.lock
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stores-cargo-lock
+          path: app/src/main/rust/stores/Cargo.lock
+          if-no-files-found: ignore
+
+      - name: Unit tests
+        id: unit-tests
+        env:
+          DROIDDECK_BUILD_LABEL: ${{ steps.build-label.outputs.label }}
+          SGDB_API_KEY: ${{ secrets.SGDB_API_KEY }}
+        run: |
+          set -o pipefail
+          mkdir -p app/build
+          ./gradlew testReleaseUnitTest --console=plain --info --stacktrace -Drobolectric.logging=stderr -PndkVersion="$NDK_VERSION" 2>&1 | tee app/build/unit-tests.log
+
+      - name: Upload unit test diagnostics
+        id: unit-test-diagnostics
+        if: always() && steps.unit-tests.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: |
+            app/build/unit-tests.log
+            app/build/test-results/testReleaseUnitTest/
+            app/build/reports/tests/testReleaseUnitTest/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Sign with the testkey (v1 + v2 + v3)
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk -name '*.apk' | head -1)
+          TOOLS=$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -type d | sort -V | tail -1)
+          "$TOOLS/zipalign" -p -f 4 "$APK" "$APK.aligned"
+          "$TOOLS/apksigner" sign \
+            --ks keystore/testkey.p12 --ks-type PKCS12 --ks-pass pass:android \
+            --ks-key-alias testkey --key-pass pass:android \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --out "$APK" "$APK.aligned"
+          rm -f "$APK.aligned" "$APK.idsig"
+
+      - name: Check the signature
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk -name '*.apk' | head -1)
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --min-sdk-version 21 --verbose --print-certs "$APK" | tee /tmp/sig.txt
+          unzip -l "$APK" | grep -qE 'META-INF/.*\.(SF|RSA|DSA)$' \
+            || { echo "::error::apk carries no JAR signature files"; exit 1; }
+          for scheme in "v1 scheme (JAR signing): true" "v2 scheme (APK Signature Scheme v2): true" \
+                        "v3 scheme (APK Signature Scheme v3): true"; do
+            grep -qF "$scheme" /tmp/sig.txt || { echo "::error::apk is not signed with $scheme"; exit 1; }
+          done
+          grep -qi "CN=Android, OU=Android, O=Android" /tmp/sig.txt \
+            || { echo "::error::apk is not signed with the AOSP testkey"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        id: apk-upload
+        with:
+          name: droiddeck-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: droiddeck-packs
+          path: app/build/packs/*.tar.zst
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Report on the pull request
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          UNIT_TEST_OUTCOME: ${{ steps.unit-tests.outcome }}
+          TEST_DIAGNOSTICS_URL: ${{ steps.unit-test-diagnostics.outputs.artifact-url }}
+          APK_OUTCOME: ${{ steps.apk-upload.outcome }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        run: bash tools/release/report-build.sh
+
+  python-tests:
+    name: Python and native regression tests
+    needs: source
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Merge the pinned APK base
+        if: github.event_name == 'pull_request'
+        env:
+          BUILD_BASE_SHA: ${{ needs.source.outputs.base-sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BUILD_BASE_SHA"
+          git config user.name "ci"
+          git config user.email "ci@users.noreply.github.com"
+          git merge --no-ff --no-edit FETCH_HEAD
+      - name: Verify backend and test source match
+        env:
+          XBOX_SOURCE_TREE: ${{ needs.source.outputs.tree-sha }}
+        run: test "$(git rev-parse 'HEAD^{tree}')" = "$XBOX_SOURCE_TREE"
+      - name: Install Python test dependencies
+        timeout-minutes: 7
+        run: bash tools/ci/install-ubuntu-packages.sh python3-yaml gcc-aarch64-linux-gnu libc6-dev-arm64-cross qemu-user libvulkan-dev mesa-vulkan-drivers
+      - name: Resolve the pinned Android NDK
+        run: bash tools/ci/resolve-ndk.sh
+
+      - name: Check Quest tracking IPC
+        run: |
+          set -euo pipefail
+          NDK="${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK_HOME:-$ANDROID_NDK_ROOT}}"
+          VK_INCLUDE=$(ls -d "$NDK"/toolchains/llvm/prebuilt/*/sysroot/usr/include | head -1)
+          mkdir -p build/vr/include
+          cp -R "$VK_INCLUDE/vulkan" build/vr/include/
+          if [ -d "$VK_INCLUDE/vk_video" ]; then cp -R "$VK_INCLUDE/vk_video" build/vr/include/; fi
+          g++ -std=c++17 -Wall -Wextra -Werror -pthread tools/vr/tests/test_xr_tracking.cpp -o /tmp/test-xr-tracking
+          /tmp/test-xr-tracking
+          g++ -std=c++17 -Wall -Wextra -Werror tools/vr/tests/test_xr_touch.cpp -o /tmp/test-xr-touch
+          /tmp/test-xr-touch
+          g++ -std=c++17 -Wall -Wextra -Werror tools/vr/tests/test_pad_controller_config.cpp -o /tmp/test-pad-controller-config
+          /tmp/test-pad-controller-config
+          g++ -std=c++17 -Wall -Wextra -Werror -pthread tools/vr/tests/test_xr_vsync.cpp -o /tmp/test-xr-vsync
+          /tmp/test-xr-vsync
+          g++ -std=c++17 -Wall -Wextra -Werror -pthread tools/vr/tests/test_xr_frames.cpp -o /tmp/test-xr-frames
+          /tmp/test-xr-frames
+          cc -Itools/vr/third_party/wayland -c tools/vr/src/wayland_client_stub.c -o /tmp/test-wayland-stub.o
+          cc -Itools/vr/third_party/wayland -c app/src/main/cpp/waylandcomp/generated/xdg-shell-protocol.c -o /tmp/test-xdg-shell.o
+          g++ -std=c++17 -Wall -Wextra -Werror -Wno-unused-parameter -Wno-missing-field-initializers -pthread -Ibuild/vr/include \
+            -Itools/vr/third_party/wayland -Iapp/src/main/cpp/waylandcomp/generated \
+            tools/vr/tests/test_presenter_shutdown.cpp tools/vr/src/presenter.cpp /tmp/test-wayland-stub.o /tmp/test-xdg-shell.o \
+            -ldl -o /tmp/test-presenter-shutdown
+          timeout 10 /tmp/test-presenter-shutdown
+
+      - name: Steam import and game environment tests
+        run: python3 -m unittest discover -s tools/tests -p 'test_*.py'
+
+  checks:
+    name: Compile and test APK
+    needs: [build, python-tests]
+    if: ${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require compilation and every test job
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          PYTHON_RESULT: ${{ needs.python-tests.result }}
+        run: test "$BUILD_RESULT" = success && test "$PYTHON_RESULT" = success
+
+  sign:
+    needs: [build, checks]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/sign.yml
+    with:
+      environment: signing-main
+      variants: ${{ needs.build.outputs.variants }}
+    secrets: inherit
+
+  packs:
+    needs: [build, checks]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/publish-packs.yml
+    secrets: inherit
+
+  announce:
+    needs: [build, sign, packs]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      CI_REPO: Droid-Deck/DroidDeck-CI
+      KEEP: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: droiddeck-signed-*
+          merge-multiple: true
+          path: signed
+
+      - uses: actions/create-github-app-token@v2
+        id: ci-token
+        with:
+          app-id: ${{ vars.DROIDDECK_CI_APP_ID }}
+          private-key: ${{ secrets.DROIDDECK_CI_APP_KEY }}
+          owner: Droid-Deck
+          repositories: DroidDeck-CI
+
+      - name: Describe the change
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash tools/release/describe-build.sh
+
+      - name: Publish to DroidDeck-CI
+        id: publish
+        env:
+          GH_TOKEN: ${{ steps.ci-token.outputs.token }}
+        run: bash tools/release/publish-ci.sh
+
+      - name: Post the Preview build to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_BUILDS_WEBHOOK }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ steps.publish.outputs.release }}
+          APK: ${{ steps.publish.outputs.apk }}
+        run: bash tools/release/announce-preview.sh
+
+
+  catalog:
+    needs: announce
+    if: ${{ always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.announce.result != 'skipped' }}
+    uses: ./.github/workflows/update-catalog.yml
+    secrets: inherit

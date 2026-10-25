@@ -91,7 +91,7 @@ class FrontEndActivity : ComponentActivity() {
     private val components = ComponentsMenu(this, ui)
     private val decky = DeckyMenu(this, ui)
     private val updates = UpdatesMenu(this, ui)
-    private val protons = ProtonMenu(this, ui)
+    private val protons = ProtonMenu(this, ui) { !busy && flood == null && pkgStage == null && components.compBusy == null }
 
     private var installed by mutableStateOf<String?>(null)
     private var flood by mutableStateOf<PendingFlood?>(null)
@@ -120,7 +120,7 @@ class FrontEndActivity : ComponentActivity() {
     private var glThread by mutableStateOf(true)
     private var noGlError by mutableStateOf(true)
     private var returnAfterGame by mutableStateOf(true)
-    private var shaderPrecache by mutableStateOf(true)
+    private var shaderPrecache by mutableStateOf<Boolean?>(null)
     private var steamRepairQueued by mutableStateOf(false)
     private var mangoapp by mutableStateOf(true)
     private var steamController by mutableStateOf(SessionPrefs.CONTROLLER_DECK)
@@ -461,7 +461,13 @@ class FrontEndActivity : ComponentActivity() {
     }
 
     private fun launchFlooded(f: PendingFlood) {
-        if (busy || LinuxRuntimeInstaller.isBusy()) { flood = null; floodProgress = 0f; return }
+        if (busy || LinuxRuntimeInstaller.isBusy() || protons.protonBusyId != null ||
+            ProtonExtras.installInProgress || pkgStage != null) {
+            flood = null
+            floodProgress = 0f
+            com.droiddeck.launcher.ui.LaunchOrigin.flooding = null
+            return
+        }
         val signal = com.droiddeck.launcher.ui.Themes.byId(theme).signal
         super.startActivity(f.intent.putExtra(com.droiddeck.launcher.ui.EXTRA_FLOOD, signal.toArgb()))
         overridePendingTransition(0, 0)
@@ -1734,7 +1740,7 @@ class FrontEndActivity : ComponentActivity() {
                 onSteamClientArch = { id ->
                     SessionPrefs.setSteamClientArch(this, id)
                     steamClientArch = id
-                    shaderPrecache = SessionPrefs.shaderPrecache(this)
+                    loadShaderPrecache(mode)
                     refresh()
                 },
                 onMangoapp = { on -> SessionPrefs.setMangoapp(this, on); mangoapp = on },
@@ -1898,6 +1904,19 @@ class FrontEndActivity : ComponentActivity() {
     private var pipAutoEnter by mutableStateOf(false)
     private var unfoldedControls by mutableStateOf(false)
     private var unfoldedControlsWithController by mutableStateOf(false)
+    private var shaderPrecacheGeneration = 0
+
+    private fun loadShaderPrecache(mode: String) {
+        val generation = ++shaderPrecacheGeneration
+        shaderPrecache = null
+        if (mode != SessionService.MODE_STEAM) return
+        Thread({
+            val precache = SessionPrefs.shaderPrecache(this)
+            ui.post {
+                if (!isDestroyed && generation == shaderPrecacheGeneration) shaderPrecache = precache
+            }
+        }, "shader-precache").start()
+    }
 
     private fun loadModeSettings(mode: String) {
         pipAutoEnter = SessionPrefs.pipAutoEnter(this)
@@ -1913,7 +1932,7 @@ class FrontEndActivity : ComponentActivity() {
         steamRepairQueued = SteamRepair.queued(this)
         mangoapp = SessionPrefs.mangoapp(this)
         returnAfterGame = SessionPrefs.returnAfterGame(this)
-        shaderPrecache = SessionPrefs.shaderPrecache(this)
+        loadShaderPrecache(mode)
         steamController = SessionPrefs.steamController(this)
         runSteamAtStartup = SessionPrefs.runSteamAtStartup(this)
         loadBootMovie()

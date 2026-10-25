@@ -51,20 +51,16 @@ static void rt_send(void *dpy, uint32_t action) {
     }
 }
 
-/* sdl3deck: the real XTest function. Steam's client library links libXtst privately, so from a preload it is
- * often not "next" (RTLD_NEXT finds nothing and the call would be dropped): then take it from libXtst itself. */
-static void *rt_real(const char *name) {
+static void *rt_xtst(const char *name) {
     void *fn = dlsym(RTLD_NEXT, name);
-    if (!fn) {
-        void *xtst = dlopen("libXtst.so.6", RTLD_LAZY | RTLD_NOLOAD);
-        if (xtst) fn = dlsym(xtst, name);
-    }
-    return fn;
+    if (fn) return fn;
+    void *lib = dlopen("libXtst.so.6", RTLD_LAZY | RTLD_NOLOAD);
+    return lib ? dlsym(lib, name) : NULL;
 }
 
 int XTestFakeMotionEvent(void *dpy, int screen, int x, int y, unsigned long delay) {
     static int (*real)(void *, int, int, int, unsigned long);
-    if (!real) real = (int (*)(void *, int, int, int, unsigned long))rt_real("XTestFakeMotionEvent");
+    if (!real) real = (int (*)(void *, int, int, int, unsigned long))rt_xtst("XTestFakeMotionEvent");
     if (rt_enabled()) {
         pthread_mutex_lock(&rt_lock);
         rt_x = x;
@@ -80,7 +76,7 @@ int XTestFakeMotionEvent(void *dpy, int screen, int x, int y, unsigned long dela
 
 int XTestFakeButtonEvent(void *dpy, unsigned int button, int press, unsigned long delay) {
     static int (*real)(void *, unsigned int, int, unsigned long);
-    if (!real) real = (int (*)(void *, unsigned int, int, unsigned long))rt_real("XTestFakeButtonEvent");
+    if (!real) real = (int (*)(void *, unsigned int, int, unsigned long))rt_xtst("XTestFakeButtonEvent");
     if (button == 1) {
         pthread_mutex_lock(&rt_lock);
         int handled = 0;

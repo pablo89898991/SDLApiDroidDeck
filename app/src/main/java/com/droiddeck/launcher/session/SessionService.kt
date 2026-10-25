@@ -710,7 +710,10 @@ class SessionService : Service() {
         SessionState.steamClientArch = if (steamHere) SessionPrefs.steamClientArch(this) else null
         SessionState.steamClientArch?.let { arch ->
             guest.add("BL_STEAM_CLIENT_ARCH=$arch")
-            SessionPaths.current()?.let { SessionArtifacts.recordClient(it, arch) }
+            SessionPaths.current()?.let {
+                SessionArtifacts.recordClient(it, arch)
+                SessionArtifacts.markSteamLogs(it, File(SessionPrefs.steamRoot(this, arch), "logs"))
+            }
             if (arch == "x86_64") FexCatalog.cached(this)?.let { guest.addAll(FexCatalog.environment(it)) }
         }
         if (SessionState.mode == MODE_STEAM) {
@@ -1658,6 +1661,8 @@ class SessionService : Service() {
         completeNativeSleep()
         val (ended, endedArch) = synchronized(stopLock) {
             if (!SessionState.running) return
+            SessionEvents.record("guest.exited", mapOf("status" to status))
+            SessionEvents.transition(SessionPhase.STOPPING, "session.stopping", mapOf("status" to status))
             SessionState.running = false
             SessionPaths.take() to SessionState.steamClientArch
         }
@@ -1667,11 +1672,8 @@ class SessionService : Service() {
         val stoppedSession = SessionState.sessionId
         val launcherEnded = SessionState.mode == MODE_STEAM || SessionState.mode == MODE_DESKTOP || SessionState.program == NoSteamLaunch.EPIC
         SessionState.stopRequested = false
-        SessionEvents.record("guest.exited", mapOf("status" to status))
         GpuClockPin.stop(this)
         GameThreadHints.stop()
-        com.droiddeck.launcher.input.DualSenseBridge.detach()
-        SessionEvents.transition(SessionPhase.STOPPING, "session.stopping", mapOf("status" to status))
         suspendOperationPending = false
         freezePending = false
         launchWatcher?.stopWatching()

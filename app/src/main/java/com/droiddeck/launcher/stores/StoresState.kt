@@ -126,7 +126,9 @@ object StoresState {
     fun installedGame(store: Store, id: String): InstalledStoreGame? = installed.firstOrNull { it.sidecar.store == store && it.sidecar.id == id }
 
     fun detailItem(store: Store, id: String): CatalogItem? = detailCatalogItem(
-        store, id, library[store].orEmpty(), found[store].orEmpty(), shelves[store],
+        store, id, library[store].orEmpty(),
+        found[store].orEmpty() + if (store == Store.ITCH) com.droiddeck.launcher.stores.itch.ItchBrowseState.items else emptyList(),
+        shelves[store],
     )
 
     fun open(context: Context, store: Store, force: Boolean = false) {
@@ -182,6 +184,8 @@ object StoresState {
     }
 
     var openDownloads by mutableStateOf(false)
+    /** A "store:id" key another page asks the Stores page to open. */
+    var openGameRequest by mutableStateOf<String?>(null)
 
     private fun askForNotifications(context: Context) {
         val activity = context as? android.app.Activity ?: return

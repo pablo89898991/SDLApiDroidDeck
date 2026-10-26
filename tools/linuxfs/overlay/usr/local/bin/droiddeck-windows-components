@@ -3,6 +3,8 @@
 
     droiddeck-windows-components FILE       pick them for FILE's prefix (the file manager's "Windows Components...")
     droiddeck-windows-components --install  that file manager entry, for Windows programs
+    droiddeck-windows-components --prefix ID NAME COMPATDATA [FOLDER]
+                                            pick them for that prefix (droiddeck-wine's shared C: drive)
 
 FILE gets the prefix Run gives it (droiddeck-proton-run: a Steam game's, the prefix it sits in, a shortcut's, or one
 of its own). The components are picked in DroidDeck's own Windows components window -- the one its game settings
@@ -104,17 +106,38 @@ def clean(text):
     return re.sub(r"[\x00-\x1f]+", " ", text).strip()[:120]
 
 
+def request(key, name, compatdata, folder):
+    """Asks DroidDeck (it watches the session's launch folder) to show its components window for the prefix."""
+    launch = os.environ.get("BL_LAUNCH_DIR")
+    if not launch or not os.path.isdir(launch):
+        say("not inside a DroidDeck session (BL_LAUNCH_DIR unset)")
+        notify("Windows components", "This only works on DroidDeck's desktop.", "dialog-error")
+        return 69
+    path = os.path.join(launch, "wincomponents-%s.request" % key)
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        f.write("app=%s\nname=%s\ncompat=%s\ndir=%s\n" % (key, name, compatdata, folder or ""))
+    os.replace(path + ".tmp", path)
+    notify("Windows components for %s" % name,
+           "Pick them in DroidDeck's window. They are added the next time %s starts." % name, "run-build-install")
+    return 0
+
+
+def ask_prefix(args):
+    if len(args) not in (3, 4) or not re.fullmatch(r"[1-9][0-9]{0,9}", args[0]) or int(args[0]) >= 2 ** 32:
+        say("usage: droiddeck-windows-components --prefix ID NAME COMPATDATA [FOLDER]")
+        return 2
+    folder = args[3] if len(args) == 4 and os.path.isdir(args[3]) else ""
+    return request(args[0], clean(args[1]) or "Windows programs", os.path.abspath(args[2]), folder)
+
+
 def ask(program):
     if not os.path.isfile(program) or not program.lower().endswith(WINDOWS):
         say("%s is not a Windows program" % program)
         notify("No Windows components for %s" % os.path.basename(program), "Pick a Windows program (.exe or .msi).",
                "dialog-error")
         return 2
-    launch = os.environ.get("BL_LAUNCH_DIR")
-    if not launch or not os.path.isdir(launch):
-        say("not inside a DroidDeck session (BL_LAUNCH_DIR unset)")
-        notify("Windows components", "This only works on DroidDeck's desktop.", "dialog-error")
-        return 69
+    if not os.environ.get("BL_LAUNCH_DIR") or not os.path.isdir(os.environ["BL_LAUNCH_DIR"]):
+        return request("0", "", "", "")  # says why
     run = runpy.run_path(PROTON_RUN, run_name="droiddeck_proton_run")
     root = os.environ.get("STEAM_COMPAT_CLIENT_INSTALL_PATH") or run["STEAM_ROOT"]
     target = run["locate"](program, root)
@@ -125,19 +148,15 @@ def ask(program):
                "dialog-error")
         return 1
     name = clean(program_name(program, target)) or "Windows program"
-    request = os.path.join(launch, "wincomponents-%s.request" % key)
-    with open(request + ".tmp", "w", encoding="utf-8") as f:
-        f.write("app=%s\nname=%s\ncompat=%s\ndir=%s\n" % (key, name, target.compatdata, os.path.dirname(program)))
-    os.replace(request + ".tmp", request)
     say("%s: %s prefix %s (components key %s)" % (program, target.kind, target.compatdata, key))
-    notify("Windows components for %s" % name,
-           "Pick them in DroidDeck's window. They are added the next time %s starts." % name, "run-build-install")
-    return 0
+    return request(key, name, target.compatdata, os.path.dirname(program))
 
 
 def main(argv):
     if argv[:1] == ["--install"]:
         return install()
+    if argv[:1] == ["--prefix"]:
+        return ask_prefix(argv[1:])
     if len(argv) != 1:
         say("usage: droiddeck-windows-components FILE | --install")
         return 2

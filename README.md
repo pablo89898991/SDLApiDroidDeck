@@ -34,6 +34,10 @@ sees the **real controller**, exactly as if it were plugged into a PC.
   desktop, set up like a PC.
 - **Windows components for desktop programs**: right-click any Windows program on the desktop -> Windows
   Components... to add Visual C++ runtimes, DirectX extras, .NET, XNA and more to its prefix.
+- **Wine without Steam**: Windows programs start even if Steam was never installed or signed in. DroidDeck
+  downloads its own Wine (DroidDeck-Proton: Wine 11 + FEX) once when Steam's Proton isn't there.
+- **Wine menu on the desktop**: install Windows programs into a shared C: drive, start them from Wine -> Programs,
+  and open Wine Configuration, Registry Editor, Uninstall Programs, Command Prompt and more.
 - **Auto-sync**: rebuilt on the newest upstream DroidDeck every day.
 
 ---
@@ -138,6 +142,28 @@ it needs:
 
 The picks belong to the prefix, so a Steam game's are the same as in its game settings. Use touch in the window:
 the bridged controller keeps driving the desktop meanwhile.
+
+### Wine without Steam
+
+Windows programs normally use the ARM64 Proton that Steam downloads. Now they don't need Steam at all: when
+Steam's Proton isn't there (Steam never installed, not signed in, or not downloaded yet), DroidDeck uses its own
+**DroidDeck-Proton** (Wine 11 with FEX). If it isn't installed yet, it's downloaded once (a notification shows it,
+about 4 GB free space needed) and the program starts when it's ready. This also covers a game's "Start without
+Steam". When Steam's Proton is there, Steam's choices are used as before.
+
+### Wine menu
+
+The desktop's application menu has a **Wine** folder:
+
+- **Install a Windows Program...**: pick an installer; it goes into Wine's shared **C: drive**. You can also
+  right-click an installer in the file manager -> **Run in Wine's C: Drive**.
+- **Programs**: everything the installers added to the Start menu.
+- **C: Drive**: opens the shared C: drive in the file manager.
+- **Wine Configuration**, **Registry Editor**, **File Manager**, **Command Prompt**, **Task Manager**,
+  **Uninstall Programs**, **Game Controllers**.
+- **Windows Components**: Visual C++, DirectX, .NET, XNA and more for the shared C: drive.
+
+The shared C: drive is separate from every game's own prefix.
 
 ## Steam Controller (2026) over cable or puck
 

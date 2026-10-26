@@ -1,0 +1,568 @@
+#!/usr/bin/python3
+"""Wine on DroidDeck without Steam, and a Wine menu on the desktop (sdl3deck).
+
+    droiddeck-wine --install           the desktop's Wine menu and the file manager's entry (at desktop start)
+    droiddeck-wine tool NAME [ARGS]    a Wine tool in Wine's shared C: drive (winecfg, regedit, winefile, ...)
+    droiddeck-wine install [FILE]      an installer or program in the shared C: drive (asks for it without FILE)
+    droiddeck-wine drive               the shared C: drive in the file manager
+    droiddeck-wine components          DroidDeck's Windows components window for the shared C: drive
+    droiddeck-wine programs            the menu's Programs: what is installed in the shared C: drive
+    droiddeck-wine ensure              a Wine that needs no Steam (DroidDeck-Proton, downloaded once if none is there)
+
+Windows programs run with an ARM64 Proton (Wine with FEX). DroidDeck's own tool starts the ARM64 Proton the Steam
+client downloads, so without Steam - never installed, not signed in, or Proton not downloaded yet - nothing started.
+droiddeck-proton-run now asks usable_tool() here: when its pick is that tool and Steam's ARM64 Proton is not there,
+the newest installed DroidDeck-Proton (else another ARM64 Proton from compatibilitytools.d) runs it instead, and when
+there is none, DroidDeck-Proton is downloaded once from its GitHub release (droiddeck-proton-extra, checksum checked).
+Steam's own choices are untouched while its Proton is there.
+
+The shared C: drive is one prefix (compatdata/SHARED_ID) for the programs one installs, apart from each game's own;
+programs inside it start in it from the file manager too (droiddeck-proton-run finds the prefix a file sits in), and
+the menu's Programs lists the Start menu shortcuts its installers made.
+"""
+import fcntl
+import hashlib
+import os
+import re
+import runpy
+import shutil
+import struct
+import subprocess
+import sys
+
+HOME = os.environ.get("HOME") or "/root"
+BIN = "/usr/local/bin"
+PROTON_RUN = os.path.join(BIN, "droiddeck-proton-run")
+PROTON_EXTRA = os.path.join(BIN, "droiddeck-proton-extra")
+COMPAT = os.path.join(BIN, "steam-compatibility")
+WINCOMP = os.path.join(BIN, "droiddeck-windows-components")
+SELF = os.path.join(BIN, "droiddeck-wine")
+OWN_WINE = "droiddeck"            # droiddeck-proton-extra's name for DroidDeck-Proton
+OWN_WINE_DIR = "DroidDeck-Proton"
+SHARED_ID = 3589834995            # crc32("droiddeck-wine shared prefix") | 0x80000000: a shortcut-style id
+SHARED_NAME = "Wine (shared C: drive)"
+CATEGORY = "X-DroidDeck-Wine"
+PROGRAMS_CATEGORY = "X-DroidDeck-Wine-Programs"
+WINDOWS_TYPES = ("application/x-ms-dos-executable", "application/x-msdownload",
+                 "application/vnd.microsoft.portable-executable", "application/x-msi")
+# (desktop file, name, comment, icon, droiddeck-wine arguments)
+ENTRIES = (
+    ("droiddeck-wine-install.desktop", "Install a Windows Program...", "Run an installer in Wine's shared C: drive",
+     "run-build-install", "install"),
+    ("droiddeck-wine-drive.desktop", "C: Drive", "Wine's shared C: drive in the file manager", "drive-harddisk", "drive"),
+    ("droiddeck-wine-winecfg.desktop", "Wine Configuration", "Windows version, drives, audio, graphics",
+     "preferences-system", "tool winecfg"),
+    ("droiddeck-wine-components.desktop", "Windows Components", "Visual C++ runtimes, DirectX, .NET, XNA, fonts...",
+     "run-build-install", "components"),
+    ("droiddeck-wine-uninstaller.desktop", "Uninstall Programs", "Remove programs installed in Wine",
+     "edit-delete", "tool uninstaller"),
+    ("droiddeck-wine-regedit.desktop", "Registry Editor", "Wine's registry", "document-edit", "tool regedit"),
+    ("droiddeck-wine-winefile.desktop", "File Manager", "Wine's own file manager", "system-file-manager", "tool winefile"),
+    ("droiddeck-wine-cmd.desktop", "Command Prompt", "cmd.exe in Wine", "utilities-terminal", "tool wineconsole cmd"),
+    ("droiddeck-wine-taskmgr.desktop", "Task Manager", "Programs running in Wine", "utilities-system-monitor",
+     "tool taskmgr"),
+    ("droiddeck-wine-joy.desktop", "Game Controllers", "The controllers Windows programs see", "input-gaming",
+     "tool control joy.cpl"),
+)
+MENU = """<!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN"
+ "http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd">
+<Menu>
+  <Name>Applications</Name>
+  <Menu>
+    <Name>DroidDeck Wine</Name>
+    <Directory>droiddeck-wine.directory</Directory>
+    <Include><Category>%s</Category></Include>
+    <Menu>
+      <Name>DroidDeck Wine Programs</Name>
+      <Directory>droiddeck-wine-programs.directory</Directory>
+      <Include><Category>%s</Category></Include>
+    </Menu>
+  </Menu>
+</Menu>
+""" % (CATEGORY, PROGRAMS_CATEGORY)
+DIRECTORIES = {
+    "droiddeck-wine.directory": "[Desktop Entry]\nType=Directory\nName=Wine\nComment=Windows programs without Steam\nIcon=wine\n",
+    "droiddeck-wine-programs.directory": "[Desktop Entry]\nType=Directory\nName=Programs\nIcon=folder\n",
+}
+SERVICE_MENU = """[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=%s;
+Actions=wineDrive;
+
+[Desktop Action wineDrive]
+Name=Run in Wine's C: Drive
+Icon=wine
+Exec=/usr/bin/python3 %s install %%f
+""" % (";".join(WINDOWS_TYPES), SELF)
+# system location first (as the other desktop entries), the home folder when it can't be written
+SYSTEM = {"apps": "/usr/local/share/applications", "dirs": "/usr/local/share/desktop-directories",
+          "menus": "/etc/xdg/menus/applications-merged", "service": "/usr/share/kio/servicemenus"}
+USER = {"apps": os.path.join(HOME, ".local/share/applications"),
+        "dirs": os.path.join(HOME, ".local/share/desktop-directories"),
+        "menus": os.path.join(HOME, ".config/menus/applications-merged"),
+        "service": os.path.join(HOME, ".local/share/kio/servicemenus")}
+PROGRAMS_DIR = os.path.join(HOME, ".local/share/applications/droiddeck-wine")
+NOT_PROGRAMS = re.compile(r"(?i)uninst|unins\d|readme|help|manual|license|website|homepage|support")
+CURL_METER = re.compile(r"^\s*(% Total|Dload|\d+(\.\d+)?[kMG]?\s+\d)")
+
+
+def say(message):
+    print("droiddeck-wine: %s" % message, file=sys.stderr, flush=True)
+
+
+def notify(title, body, icon="wine"):
+    if not os.environ.get("DBUS_SESSION_BUS_ADDRESS") or not shutil.which("notify-send"):
+        return
+    try:
+        subprocess.run(["notify-send", "-a", "DroidDeck", "-i", icon, title, body],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def write(path, text, mode=None):
+    try:
+        with open(path, encoding="utf-8") as f:
+            same = f.read() == text
+    except OSError:
+        same = False
+    if not same:
+        with open(path + ".tmp", "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(path + ".tmp", path)
+    if mode is not None:
+        os.chmod(path, mode)
+
+
+# ---------------------------------------------------------------- a Wine that needs no Steam
+
+_compat = None
+
+
+def compat():
+    global _compat
+    if _compat is None:
+        _compat = runpy.run_path(COMPAT, run_name="steam_compatibility")
+    return _compat
+
+
+def version_key(name):
+    return [int(n) for n in re.findall(r"\d+", re.sub(r"(?i)aarch64|arm64|x86_64|x86-64|amd64", " ", name))]
+
+
+def needs_steam(root, tool):
+    """Whether [tool] is DroidDeck's own tool while the ARM64 Proton the Steam client downloads for it is missing:
+    it can't start anything then."""
+    own = dict(compat()["OWN_TOOLS"])
+    return tool in own and compat()["find_source"](root, own[tool]) is None
+
+
+def wines(root, available):
+    """The tools that can start a Windows program by themselves, best first: DroidDeck-Proton, then any other
+    ARM64 Proton in compatibilitytools.d, newest first; DroidDeck's own tool only while Steam's Proton is there."""
+    fex = compat().get("FEX_TOOL")
+    own = dict(compat()["OWN_TOOLS"])
+    found = []
+    for name, (folder, _command) in available.items():
+        if name == fex or needs_steam(root, name):
+            continue
+        entry = os.path.basename(folder.rstrip("/"))
+        found.append((name in own, entry.startswith(OWN_WINE_DIR), version_key(entry), entry, name))
+    found.sort(reverse=True)
+    return [item[-1] for item in found]
+
+
+def adopted(root, name, available, rescan):
+    """[available] with [name] started through DroidDeck's wrapper (game settings, components, input): a Proton
+    unpacked while no session ran has not been adopted by steam-compatibility yet."""
+    folder, command = available[name]
+    tools = os.path.join(root, "compatibilitytools.d")
+    wrapper = compat().get("EXTRA_WRAPPER")
+    if not wrapper or command == wrapper or os.path.dirname(folder.rstrip("/")) != tools.rstrip("/"):
+        return available
+    try:
+        compat()["adopt_extras"](tools)
+        fresh = rescan(root)
+        if name in fresh:
+            return fresh
+    except Exception as error:  # the tool still runs without the wrapper
+        say("could not adopt %s (%s)" % (name, error))
+    return available
+
+
+def ensure(root, rescan=None):
+    """True when a Wine that needs no Steam is installed, after downloading DroidDeck-Proton once if needed."""
+    tools = os.path.join(root, "compatibilitytools.d")
+    os.makedirs(tools, exist_ok=True)
+    rescan = rescan or runpy.run_path(PROTON_RUN, run_name="droiddeck_proton_run")["tools"]
+    with open(os.path.join(tools, ".droiddeck-wine.lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)  # one download, whoever asks first; the others wait for it
+        if wines(root, rescan(root)):
+            return True
+        say("no ARM64 Wine that runs without Steam; downloading DroidDeck-Proton")
+        notify("Downloading Wine", "DroidDeck-Proton (Wine with FEX), once: several hundred MB. Windows programs start "
+               "when it is ready, no Steam needed.", "download")
+        last = ""
+        try:
+            child = subprocess.Popen([sys.executable or "/usr/bin/python3", PROTON_EXTRA, root, OWN_WINE],
+                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+            for line in child.stdout:  # curl's progress meter ("\r" updates) is left out of the log
+                line = line.rstrip()
+                if line and not CURL_METER.match(line):
+                    last = line
+                    print(line, file=sys.stderr, flush=True)
+            status = child.wait()
+        except OSError as error:
+            status, last = 127, str(error)
+        if status == 0 and wines(root, rescan(root)):
+            notify("Wine is ready", "DroidDeck-Proton is installed; Windows programs start without Steam.", "wine")
+            return True
+        reason = last.replace("droiddeck-proton-extra: ", "") or "status %d" % status
+        say("DroidDeck-Proton could not be installed: %s" % reason)
+        notify("Wine could not be downloaded", reason, "dialog-error")
+        return False
+
+
+def usable_tool(root, name, why, available, rescan):
+    """droiddeck-proton-run's pick, or a Wine that starts without Steam when the pick can't: (name, why, available)."""
+    if name is not None and not needs_steam(root, name):
+        return name, why, available
+    found = wines(root, available)
+    if not found and ensure(root, rescan):
+        available = rescan(root)
+        found = wines(root, available)
+    if not found:
+        return name, why, available
+    pick = found[0]
+    available = adopted(root, pick, available, rescan)
+    return pick, "Steam's ARM64 Proton isn't downloaded, so DroidDeck's own Wine", available
+
+
+# ---------------------------------------------------------------- the shared C: drive
+
+def proton_run():
+    return runpy.run_path(PROTON_RUN, run_name="droiddeck_proton_run")
+
+
+def steam_root(run):
+    return os.environ.get("STEAM_COMPAT_CLIENT_INSTALL_PATH") or run["STEAM_ROOT"]
+
+
+def shared(root):
+    compatdata = os.path.join(root, "steamapps", "compatdata", str(SHARED_ID))
+    return compatdata, os.path.join(compatdata, "pfx", "drive_c")
+
+
+def tool(argv, wait=False):
+    """A Wine program by name (winecfg, regedit, ...) in the shared prefix, in a desktop window, beside whatever
+    already runs there (Proton's run verb). The tool is started as droiddeck-proton-run starts a program."""
+    if not argv or not re.fullmatch(r"[A-Za-z0-9_.-]+", argv[0]):
+        say("usage: droiddeck-wine tool NAME [ARGS...]")
+        return 2
+    run = proton_run()
+    root = steam_root(run)
+    compatdata, drive = shared(root)
+    target = run["Target"](SHARED_ID, compatdata, drive if os.path.isdir(drive) else HOME, root, "fixed")
+    available = run["tools"](root)
+    name, why = run["choose_tool"](target.appid, run["mapping"](root), available)
+    name, why, available = usable_tool(root, name, why, available, run["tools"])
+    if name is None or name not in available:
+        notify("Wine could not start", "No ARM64 Wine is installed and none could be downloaded.", "dialog-error")
+        return 69
+    folder, command = available[name]
+    os.makedirs(compatdata, exist_ok=True)
+    env = run["environment"](os.environ, target, folder, root, True)
+    entry = os.path.join(folder, command)
+    say("%s with %s (%s), prefix %s" % (" ".join(argv), name, why, compatdata))
+    try:
+        os.chdir(target.start)
+    except OSError:
+        pass
+    if wait:
+        return subprocess.call([entry, "run"] + argv, env=env)
+    os.execve(entry, [entry, "run"] + argv, env)
+    return 0
+
+
+def first_start(root):
+    """The shared prefix made once (Proton sets it up before the first program)."""
+    _compatdata, drive = shared(root)
+    if os.path.isdir(drive):
+        return True
+    notify("Setting up Wine's C: drive", "Once, about a minute.", "wine")
+    tool(["wineboot", "--init"], wait=True)
+    return os.path.isdir(drive)
+
+
+def pick_file():
+    """An installer chosen in a file dialog, or None."""
+    start = os.path.join(HOME, "Downloads") if os.path.isdir(os.path.join(HOME, "Downloads")) else HOME
+    for dialog in (["kdialog", "--title", "Install a Windows Program", "--getopenfilename", start,
+                    "*.exe *.EXE *.msi *.MSI|Windows programs (*.exe, *.msi)"],
+                   ["zenity", "--file-selection", "--title=Install a Windows Program", "--filename=%s/" % start,
+                    "--file-filter=Windows programs | *.exe *.EXE *.msi *.MSI"]):
+        if shutil.which(dialog[0]):
+            try:
+                chosen = subprocess.run(dialog, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True).stdout.strip()
+            except OSError:
+                continue
+            return chosen or None
+    notify("Install a Windows Program", "Right-click the installer in the file manager -> Run in Wine's C: Drive.",
+           "run-build-install")
+    open_folder(start)
+    return None
+
+
+def install(argv):
+    program = os.path.abspath(argv[0]) if argv else pick_file()
+    if not program:
+        return 1
+    if not os.path.isfile(program):
+        say("%s does not exist" % program)
+        return 2
+    say("%s in the shared C: drive" % program)
+    status = subprocess.call([sys.executable or "/usr/bin/python3", PROTON_RUN, "--window", "--prefix", str(SHARED_ID),
+                              program] + argv[1:])
+    count = programs()
+    if count:
+        notify("Wine's programs", "%d program(s) in the menu: Wine -> Programs." % count, "wine")
+    return status
+
+
+def open_folder(path):
+    for opener in (["dolphin", "--new-window"], ["xdg-open"]):
+        if shutil.which(opener[0]):
+            subprocess.Popen(opener + [path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+            return 0
+    say("no file manager to open %s" % path)
+    return 1
+
+
+def drive():
+    root = steam_root(proton_run())
+    if not first_start(root):
+        return 1
+    return open_folder(shared(root)[1])
+
+
+def components():
+    root = steam_root(proton_run())
+    compatdata, drive_c = shared(root)
+    if not first_start(root):
+        return 1
+    # no program folder: recommendations come from a game's folder, and the C: drive holds all of Windows
+    return subprocess.call([sys.executable or "/usr/bin/python3", WINCOMP, "--prefix", str(SHARED_ID), SHARED_NAME,
+                            compatdata])
+
+
+# ---------------------------------------------------------------- the menu's Programs (Start menu shortcuts)
+
+def u16(data, at):
+    return struct.unpack_from("<H", data, at)[0]
+
+
+def u32(data, at):
+    return struct.unpack_from("<I", data, at)[0]
+
+
+def cstring(data, at, wide=False):
+    if wide:
+        end = at
+        while end + 1 < len(data) and data[end:end + 2] != b"\0\0":
+            end += 2
+        return data[at:end].decode("utf-16-le", "replace")
+    end = data.find(b"\0", at)
+    return data[at:end if end >= 0 else len(data)].decode("cp1252", "replace")
+
+
+def shortcut(data):
+    """(target, arguments, working folder, relative target) of a Windows shortcut (.lnk, MS-SHLLINK); Wine's
+    installers' shortcuts carry the target in LinkInfo's local base path."""
+    if len(data) < 0x4C or u32(data, 0) != 0x4C:
+        return None
+    flags = u32(data, 0x14)
+    at = 0x4C
+    target = None
+    if flags & 0x01:
+        at += 2 + u16(data, at)
+    if flags & 0x02:
+        size, header, info = u32(data, at), u32(data, at + 4), u32(data, at + 8)
+        if info & 0x01:
+            if header >= 0x24 and u32(data, at + 0x1C):
+                base = cstring(data, at + u32(data, at + 0x1C), True)
+            else:
+                base = cstring(data, at + u32(data, at + 0x10))
+            suffix = cstring(data, at + u32(data, at + 0x18)) if u32(data, at + 0x18) else ""
+            target = base + suffix
+        at += size
+    wide = bool(flags & 0x80)
+    strings = {}
+    for bit, key in ((0x04, "name"), (0x08, "relative"), (0x10, "workdir"), (0x20, "args"), (0x40, "icon")):
+        if flags & bit:
+            count = u16(data, at)
+            at += 2
+            raw = data[at:at + count * (2 if wide else 1)]
+            at += count * (2 if wide else 1)
+            strings[key] = raw.decode("utf-16-le" if wide else "cp1252", "replace")
+    return target, strings.get("args", ""), strings.get("workdir", ""), strings.get("relative", "")
+
+
+def unix_path(windows, pfx, find_file):
+    """A Windows path in [pfx] as a file here, or None."""
+    windows = windows.strip().strip('"')
+    m = re.match(r"(?i)^([a-z]):[\\/]?(.*)$", windows)
+    if not m:
+        return None
+    letter, rest = m.group(1).lower(), m.group(2)
+    if letter == "c":
+        base = os.path.join(pfx, "drive_c")
+    elif letter == "z":
+        base = "/"
+    else:
+        base = os.path.realpath(os.path.join(pfx, "dosdevices", letter + ":"))
+    return find_file(base, rest) if rest else base
+
+
+def exec_quote(arg):
+    """One Exec= argument (desktop entry spec: quoted, then the string escapes)."""
+    arg = re.sub(r"[\x00-\x1f]", " ", arg).replace("%", "%%")
+    return ('"%s"' % re.sub(r'([\\"`$])', r"\\\1", arg)).replace("\\", "\\\\")
+
+
+def text_value(value):
+    return re.sub(r"[\x00-\x1f]+", " ", value).strip()
+
+
+def programs(rebuild=True):
+    """The Programs submenu: an entry for each program a shortcut in the shared prefix's Start menu (or desktop)
+    points at; started like a double-click in the file manager (droiddeck-open, which finds this prefix).
+    Returns how many there are."""
+    try:
+        run = proton_run()
+    except Exception as error:
+        say("Programs not updated (%s)" % error)
+        return 0
+    compatdata, drive_c = shared(steam_root(run))
+    pfx = os.path.join(compatdata, "pfx")
+    menus = [(os.path.join(drive_c, "ProgramData", "Microsoft", "Windows", "Start Menu", "Programs"), True)]
+    try:
+        for user in sorted(os.listdir(os.path.join(drive_c, "users"))):
+            home = os.path.join(drive_c, "users", user)
+            menus += [(os.path.join(home, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs"), True),
+                      (os.path.join(home, "Start Menu", "Programs"), True),
+                      (os.path.join(home, "Desktop"), False)]  # may be the real desktop: its own files only
+    except OSError:
+        pass
+    found = {}
+    for menu, deep in menus:
+        for folder, dirs, files in os.walk(menu):
+            if not deep:
+                dirs[:] = []
+            for name in sorted(files):
+                if not name.lower().endswith(".lnk") or NOT_PROGRAMS.search(name):
+                    continue
+                try:
+                    with open(os.path.join(folder, name), "rb") as f:
+                        parsed = shortcut(f.read(65536))
+                except (OSError, struct.error, IndexError):
+                    parsed = None
+                if not parsed:
+                    continue
+                target, args, workdir, relative = parsed
+                path = unix_path(target, pfx, run["find_file"]) if target else None
+                if not path and relative:
+                    path = run["find_file"](folder, relative)
+                if not path or not os.path.isfile(path) or not path.lower().endswith((".exe", ".bat", ".cmd", ".com")):
+                    continue
+                if NOT_PROGRAMS.search(os.path.basename(path)) or path in found:
+                    continue
+                start = unix_path(workdir, pfx, run["find_file"]) if workdir else None
+                found[path] = (text_value(name[:-4]), args, start if start and os.path.isdir(start) else os.path.dirname(path))
+    os.makedirs(PROGRAMS_DIR, exist_ok=True)
+    keep = set()
+    for path, (name, args, start) in sorted(found.items()):
+        file = "droiddeck-wine-%s.desktop" % hashlib.sha1(path.encode("utf-8", "replace")).hexdigest()[:12]
+        keep.add(file)
+        words = [exec_quote(word) for word in ["/usr/bin/python3", os.path.join(BIN, "droiddeck-open"), path]]
+        try:
+            words += [exec_quote(word) for word in run["split_words"](args)] if args else []
+        except Exception:
+            pass
+        write(os.path.join(PROGRAMS_DIR, file),
+              "[Desktop Entry]\nType=Application\nName=%s\nComment=In Wine's shared C: drive\nIcon=wine\nExec=%s\n"
+              "Path=%s\nTerminal=false\nCategories=%s;\n" % (name or os.path.basename(path), " ".join(words),
+                                                              text_value(start), PROGRAMS_CATEGORY))
+    for file in os.listdir(PROGRAMS_DIR):
+        if file.startswith("droiddeck-wine-") and file.endswith(".desktop") and file not in keep:
+            os.unlink(os.path.join(PROGRAMS_DIR, file))
+    for tool_name in ("kbuildsycoca6", "kbuildsycoca5"):  # the menu shows new entries at once
+        if rebuild and shutil.which(tool_name) and os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
+            subprocess.call([tool_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            break
+    return len(found)
+
+
+# ---------------------------------------------------------------- the desktop's menu
+
+def place(kind):
+    """The folder for [kind]: the system one when it can be written, else the home one."""
+    for folder in (SYSTEM[kind], USER[kind]):
+        try:
+            os.makedirs(folder, exist_ok=True)
+            probe = os.path.join(folder, ".droiddeck-wine-probe")
+            with open(probe, "w"):
+                pass
+            os.unlink(probe)
+            return folder
+        except OSError:
+            continue
+    raise OSError("no folder for %s can be written" % kind)
+
+
+def install_menu():
+    apps = place("apps")
+    for file, name, comment, icon, args in ENTRIES:
+        words = " ".join(exec_quote(word) for word in ["/usr/bin/python3", SELF] + args.split())
+        write(os.path.join(apps, file),
+              "[Desktop Entry]\nType=Application\nName=%s\nComment=%s\nIcon=%s\nExec=%s\nTerminal=false\n"
+              "Categories=%s;\n" % (name, comment, icon, words, CATEGORY))
+    dirs = place("dirs")
+    for file, text in DIRECTORIES.items():
+        write(os.path.join(dirs, file), text)
+    write(os.path.join(place("menus"), "droiddeck-wine.menu"), MENU)
+    service = place("service")
+    write(os.path.join(service, "droiddeck-wine.desktop"), SERVICE_MENU, 0o755)
+    say("menu: Wine (%d entries) in %s; file manager entry in %s" % (len(ENTRIES), apps, service))
+    programs(rebuild=False)  # before Plasma starts, which reads the menu anyway
+    return 0
+
+
+def main(argv):
+    if not argv:
+        print(__doc__.split("\n\n")[1], file=sys.stderr)
+        return 2
+    verb, rest = argv[0], argv[1:]
+    if verb == "--install":
+        return install_menu()
+    if verb == "tool":
+        return tool(rest)
+    if verb == "install":
+        return install(rest)
+    if verb == "drive":
+        return drive()
+    if verb == "components":
+        return components()
+    if verb == "programs":
+        print("%d program(s)" % programs())
+        return 0
+    if verb == "ensure":
+        run = proton_run()
+        return 0 if ensure(steam_root(run), run["tools"]) else 1
+    say("unknown command %s" % verb)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

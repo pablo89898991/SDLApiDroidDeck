@@ -44,6 +44,7 @@ python3 /usr/local/bin/droiddeck-pad-defaults 2>&1 | sed 's/^/[pads] /'
 python3 /usr/local/bin/droiddeck-desktop-gpu 2>&1 | sed 's/^/[gpu] /'
 /usr/local/bin/droiddeck-desktop-window-rules 2>&1 | sed 's/^/[rules] /'
 python3 /usr/local/bin/droiddeck-open --install 2>&1 | sed 's/^/[open] /'
+python3 /usr/local/bin/droiddeck-wine --install 2>&1 | sed 's/^/[wine] /'
 python3 /usr/local/bin/droiddeck-windows-components --install 2>&1 | sed 's/^/[wincomp] /'
 export APPIMAGE_EXTRACT_AND_RUN=1
 [ -e /etc/xdg/kiorc ] || printf '[Executable scripts]\nbehaviourOnLaunch=execute\n' >/etc/xdg/kiorc 2>/dev/null

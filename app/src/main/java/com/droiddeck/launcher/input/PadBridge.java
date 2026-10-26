@@ -62,6 +62,7 @@ public final class PadBridge {
     private final PadState routedTouch = new PadState();
     private boolean systemGuidePressed;
     private boolean systemQamPressed;
+    private boolean backQamPressed;
     private boolean qamChordActive;
     private int chordButton = -1;
     private boolean chordButtonPressed;
@@ -133,6 +134,7 @@ public final class PadBridge {
         routedTouch.clear();
         systemGuidePressed = false;
         systemQamPressed = false;
+        backQamPressed = false;
         qamTapPressed = false;
         qamChordActive = false;
         chordButtonPressed = false;
@@ -166,6 +168,7 @@ public final class PadBridge {
         }
         systemGuidePressed = false;
         systemQamPressed = false;
+        backQamPressed = false;
         qamChordActive = false;
         chordButtonPressed = false;
         qamTapPressed = false;
@@ -495,6 +498,7 @@ public final class PadBridge {
 
     public synchronized void releaseAll() {
         routedTouch.clear();
+        backQamPressed = false;
         releaseBackPaddles();
         state.clear();
         publish();
@@ -513,6 +517,17 @@ public final class PadBridge {
 
     private static boolean nativeQam() {
         return SessionState.getDeckPad() && FakeInputWriter.padHasQam();
+    }
+
+    public boolean canHoldQam() {
+        return builtinPad && nativeQam();
+    }
+
+    public synchronized void setBackQamPressed(boolean pressed) {
+        if (pressed && !canHoldQam()) return;
+        if (backQamPressed == pressed) return;
+        backQamPressed = pressed;
+        publish();
     }
 
     public synchronized void triggerQam() {
@@ -720,7 +735,7 @@ public final class PadBridge {
             return;
         }
         boolean guide = systemGuidePressed || qamChordActive;
-        boolean qam = nativeQam() && (systemQamPressed || qamTapPressed);
+        boolean qam = nativeQam() && (systemQamPressed || qamTapPressed || backQamPressed);
         if (!guide && !qam) {
             writer.writePad(state);
             return;

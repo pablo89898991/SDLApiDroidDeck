@@ -38,6 +38,8 @@ sees the **real controller**, exactly as if it were plugged into a PC.
   downloads its own Wine (DroidDeck-Proton: Wine 11 + FEX) once when Steam's Proton isn't there.
 - **Wine menu on the desktop**: install Windows programs into a shared C: drive, start them from Wine -> Programs,
   and open Wine Configuration, Registry Editor, Uninstall Programs, Command Prompt and more.
+- **Settings -> Wine**: see the installed and newest Wine (Proton), update it, check now, or turn automatic updates
+  off.
 - **Auto-sync**: rebuilt on the newest upstream DroidDeck every day.
 
 ---
@@ -162,8 +164,16 @@ The desktop's application menu has a **Wine** folder:
 - **Wine Configuration**, **Registry Editor**, **File Manager**, **Command Prompt**, **Task Manager**,
   **Uninstall Programs**, **Game Controllers**.
 - **Windows Components**: Visual C++, DirectX, .NET, XNA and more for the shared C: drive.
+- **Update Wine**: gets the newest DroidDeck-Proton, even while the desktop runs.
 
 The shared C: drive is separate from every game's own prefix.
+
+### Settings -> Wine
+
+DroidDeck's **Settings** have a **Wine** tab to keep Wine (Proton) up to date: the installed and newest version of
+DroidDeck-Proton (and GE-Proton / Proton-CachyOS if installed), **Install** / **Update**, **Check now**, and
+**Update automatically** (on by default; turn it off to update only when you tap Update). Updates wait until no
+session runs; on the desktop use Wine -> Update Wine. Steam's own Proton is updated by Steam.
 
 ## Steam Controller (2026) over cable or puck
 

@@ -188,7 +188,7 @@ internal fun SetupPanel(
         onDismiss = { editDownloadProxy = false },
         onSave = { a.onDownloadProxy(it); editDownloadProxy = false },
     )
-    val tabs = listOf(stringResource(R.string.setup_tab_overview), stringResource(R.string.setup_tab_controller), stringResource(R.string.setup_tab_launcher), stringResource(R.string.setup_tab_storage), stringResource(R.string.setup_tab_diagnostics), stringResource(R.string.setup_tab_glasses), "SDL3Bridge")
+    val tabs = listOf(stringResource(R.string.setup_tab_overview), stringResource(R.string.setup_tab_controller), stringResource(R.string.setup_tab_launcher), stringResource(R.string.setup_tab_storage), stringResource(R.string.setup_tab_diagnostics), stringResource(R.string.setup_tab_glasses), "SDL3Bridge", "Wine")
     var tab by rememberSaveable { mutableStateOf(if (SetupTabs.openLauncher) LAUNCHER_TAB else 0) }
     SetupTabs.openLauncher = false
     val chipFocus = remember { List(tabs.size) { FocusRequester() } }
@@ -511,6 +511,7 @@ internal fun SetupPanel(
                         }
                     }
                     GLASSES_TAB -> GlassesSetupPanel()
+                    tabs.lastIndex -> WineSettingsTab(host)   // sdl3deck: Wine (Proton) updates
                     GLASSES_TAB + 1 -> SdlBridgeSettingsTab(host)   // sdl3bridge: SDL3Bridge tab
                 }
             }

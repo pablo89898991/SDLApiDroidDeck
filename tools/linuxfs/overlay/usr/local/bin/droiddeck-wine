@@ -8,6 +8,7 @@
     droiddeck-wine components          DroidDeck's Windows components window for the shared C: drive
     droiddeck-wine programs            the menu's Programs: what is installed in the shared C: drive
     droiddeck-wine ensure              a Wine that needs no Steam (DroidDeck-Proton, downloaded once if none is there)
+    droiddeck-wine update              the newest DroidDeck-Proton, when it is newer than the installed one
 
 Windows programs run with an ARM64 Proton (Wine with FEX). DroidDeck's own tool starts the ARM64 Proton the Steam
 client downloads, so without Steam - never installed, not signed in, or Proton not downloaded yet - nothing started.
@@ -63,6 +64,8 @@ ENTRIES = (
      "tool taskmgr"),
     ("droiddeck-wine-joy.desktop", "Game Controllers", "The controllers Windows programs see", "input-gaming",
      "tool control joy.cpl"),
+    ("droiddeck-wine-update.desktop", "Update Wine", "The newest DroidDeck-Proton (Wine with FEX)", "system-software-update",
+     "update"),
 )
 MENU = """<!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN"
  "http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd">
@@ -191,37 +194,94 @@ def adopted(root, name, available, rescan):
     return available
 
 
-def ensure(root, rescan=None):
-    """True when a Wine that needs no Steam is installed, after downloading DroidDeck-Proton once if needed."""
+def fetch(root, tag=None):
+    """droiddeck-proton-extra installs DroidDeck-Proton (the newest release, or [tag]): (ok, last line it said)."""
+    command = [sys.executable or "/usr/bin/python3", PROTON_EXTRA, root, OWN_WINE] + (["--tag", tag] if tag else [])
+    last = ""
+    try:
+        child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+        for line in child.stdout:  # curl's progress meter ("\r" updates) is left out of the log
+            line = line.rstrip()
+            if line and not CURL_METER.match(line):
+                last = line
+                print(line, file=sys.stderr, flush=True)
+        status = child.wait()
+    except OSError as error:
+        status, last = 127, str(error)
+    return status == 0, last.replace("droiddeck-proton-extra: ", "") or "status %d" % status
+
+
+def locked(root):
+    """The lock every DroidDeck-Proton download here holds: one at a time, the others wait for it."""
     tools = os.path.join(root, "compatibilitytools.d")
     os.makedirs(tools, exist_ok=True)
+    lock = open(os.path.join(tools, ".droiddeck-wine.lock"), "w")
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    return lock
+
+
+def ensure(root, rescan=None):
+    """True when a Wine that needs no Steam is installed, after downloading DroidDeck-Proton once if needed."""
     rescan = rescan or runpy.run_path(PROTON_RUN, run_name="droiddeck_proton_run")["tools"]
-    with open(os.path.join(tools, ".droiddeck-wine.lock"), "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)  # one download, whoever asks first; the others wait for it
+    with locked(root):
         if wines(root, rescan(root)):
             return True
         say("no ARM64 Wine that runs without Steam; downloading DroidDeck-Proton")
         notify("Downloading Wine", "DroidDeck-Proton (Wine with FEX), once: several hundred MB. Windows programs start "
                "when it is ready, no Steam needed.", "download")
-        last = ""
-        try:
-            child = subprocess.Popen([sys.executable or "/usr/bin/python3", PROTON_EXTRA, root, OWN_WINE],
-                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
-            for line in child.stdout:  # curl's progress meter ("\r" updates) is left out of the log
-                line = line.rstrip()
-                if line and not CURL_METER.match(line):
-                    last = line
-                    print(line, file=sys.stderr, flush=True)
-            status = child.wait()
-        except OSError as error:
-            status, last = 127, str(error)
-        if status == 0 and wines(root, rescan(root)):
+        done, reason = fetch(root)
+        if done and wines(root, rescan(root)):
             notify("Wine is ready", "DroidDeck-Proton is installed; Windows programs start without Steam.", "wine")
             return True
-        reason = last.replace("droiddeck-proton-extra: ", "") or "status %d" % status
         say("DroidDeck-Proton could not be installed: %s" % reason)
         notify("Wine could not be downloaded", reason, "dialog-error")
         return False
+
+
+def own_installed(root):
+    """The DroidDeck-Proton folders in compatibilitytools.d, oldest first."""
+    tools = os.path.join(root, "compatibilitytools.d")
+    try:
+        names = [n for n in os.listdir(tools) if n.startswith(OWN_WINE_DIR)
+                 and os.path.isfile(os.path.join(tools, n, "toolmanifest.vdf"))]
+    except OSError:
+        names = []
+    return sorted(names, key=lambda n: (version_key(n), n))
+
+
+def update():
+    """Wine -> Update Wine: the newest DroidDeck-Proton release, when it is newer than the installed one. Works while
+    a session runs (the app's own updater waits for the session to end): the new version is unpacked next to the old
+    one, programs started from then on use it, and the app removes the old one later, carrying its settings over."""
+    run = proton_run()
+    root = steam_root(run)
+    try:
+        extra = runpy.run_path(PROTON_EXTRA, run_name="droiddeck_proton_extra")
+        tag, url, _sums = extra["pick_asset"](OWN_WINE)
+    except (Exception, SystemExit) as error:
+        say("could not look up DroidDeck-Proton's releases (%s)" % error)
+        notify("Could not check for a newer Wine", "GitHub could not be reached; try again later.", "dialog-error")
+        return 1
+    if not url:
+        notify("Could not check for a newer Wine", "No ARM64 release of DroidDeck-Proton was found.", "dialog-error")
+        return 1
+    with locked(root):
+        have = own_installed(root)
+        newest = have[-1] if have else None
+        if newest and version_key(tag) <= version_key(newest):
+            say("DroidDeck-Proton is up to date (%s; newest release %s)" % (newest, tag))
+            notify("Wine is up to date", "%s is the newest DroidDeck-Proton." % tag, "wine")
+            return 0
+        say("updating DroidDeck-Proton: %s -> %s" % (newest or "none", tag))
+        notify("Updating Wine", "Downloading %s (several hundred MB). Programs already running keep the version "
+               "they started with." % tag, "download")
+        done, reason = fetch(root, tag)
+    if not done:
+        say("DroidDeck-Proton %s could not be installed: %s" % (tag, reason))
+        notify("Wine could not be updated", reason, "dialog-error")
+        return 1
+    notify("Wine is updated", "%s runs Windows programs from now on." % tag, "wine")
+    return 0
 
 
 def usable_tool(root, name, why, available, rescan):
@@ -557,6 +617,8 @@ def main(argv):
     if verb == "programs":
         print("%d program(s)" % programs())
         return 0
+    if verb == "update":
+        return update()
     if verb == "ensure":
         run = proton_run()
         return 0 if ensure(steam_root(run), run["tools"]) else 1

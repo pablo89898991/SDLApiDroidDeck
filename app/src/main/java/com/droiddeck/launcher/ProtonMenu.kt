@@ -92,6 +92,7 @@ internal class ProtonMenu(
     }
 
     internal fun ensureAutoUpdates(now: Long = System.currentTimeMillis()) {
+        if (!com.droiddeck.launcher.ui.WineUpdates.automatic(activity)) return  // sdl3deck: Settings -> Wine
         if (activity.isFinishing || activity.isDestroyed || !idle() || protonBusyId != null ||
             ProtonExtras.installInProgress || SessionState.running || LinuxRuntimeInstaller.isBusy() ||
             SessionState.phase !in setOf(SessionPhase.IDLE, SessionPhase.FAILED) ||

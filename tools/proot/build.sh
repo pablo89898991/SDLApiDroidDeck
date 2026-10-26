@@ -40,6 +40,7 @@ fetch proot.tar.gz "https://github.com/termux/proot/archive/${PROOT_COMMIT}.tar.
 fetch talloc.tar.gz "https://www.samba.org/ftp/talloc/talloc-${TALLOC_VERSION}.tar.gz" "$TALLOC_SHA256" \
   "https://download.samba.org/pub/talloc/talloc-${TALLOC_VERSION}.tar.gz https://distfiles.alpinelinux.org/distfiles/edge/talloc-${TALLOC_VERSION}.tar.gz https://deb.debian.org/debian/pool/main/t/talloc/talloc_${TALLOC_VERSION}.orig.tar.gz"
 cp "$HERE/statx_mnt_id.h" "$WORK/proot/src/tracee/statx_mnt_id.h"
+cp "$HERE/profile.h" "$WORK/proot/src/syscall/profile.h"
 for patch in "$HERE"/patches/*.patch; do
   patch -d "$WORK/proot" -p1 --forward --quiet < "$patch"
 done

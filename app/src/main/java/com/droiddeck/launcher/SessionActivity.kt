@@ -318,8 +318,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var drawerPage by mutableStateOf(SessionDrawerPage.CONTROLLER)
     private var drawerControllerActive by mutableStateOf(false)
     private var backActionsInverted by mutableStateOf(false)
-    private var lowLatencyController by mutableStateOf(false)
-    private var lowLatencyTouch by mutableStateOf(false)
+    private var lowLatency by mutableStateOf(true)
     private var gameThreadHints by mutableStateOf(true)
     private var padType by mutableStateOf(SessionPrefs.CONTROLLER_DECK)
     private var pcKeyboardOpen by mutableStateOf(false)
@@ -494,7 +493,6 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (!SessionState.running) {
             val prefMode = SessionPrefs.prefMode(intent.getStringExtra(SessionService.EXTRA_MODE) ?: SessionService.MODE_STEAM)
-            SessionState.fpsLimit = SessionPrefs.fpsLimit(this, prefMode)
             SessionState.performanceMode = SessionPrefs.performanceMode(this, prefMode)
         }
         applyOutputPacing()
@@ -1021,8 +1019,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                         SessionPrefs.setBackActionsInverted(this@SessionActivity, inverted)
                         backActionsInverted = inverted
                     },
-                    lowLatencyController = lowLatencyController,
-                    lowLatencyTouch = lowLatencyTouch,
+                    lowLatency = lowLatency,
                     gameThreadHints = gameThreadHints,
                     onGameThreadHints = { on ->
                         SessionPrefs.setGameThreadHints(this@SessionActivity, on)
@@ -1030,14 +1027,9 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                         if (on) android.util.Log.i("GameThreadHints", com.droiddeck.launcher.session.GameThreadHints.start(this@SessionActivity))
                         else com.droiddeck.launcher.session.GameThreadHints.stop()
                     },
-                    onLowLatencyController = { on ->
-                        SessionPrefs.setLowLatencyController(this@SessionActivity, on)
-                        lowLatencyController = on
-                        applyLowLatency()
-                    },
-                    onLowLatencyTouch = { on ->
-                        SessionPrefs.setLowLatencyTouch(this@SessionActivity, on)
-                        lowLatencyTouch = on
+                    onLowLatency = { on ->
+                        SessionPrefs.setLowLatency(this@SessionActivity, on)
+                        lowLatency = on
                         applyLowLatency()
                     },
                     onOsc = { v ->
@@ -1101,7 +1093,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                         pipAutoEnter = on
                         pip.refresh(true)
                     },
-                    unfoldedControls = if (com.droiddeck.launcher.session.SessionDisplay.foldable(this@SessionActivity)) unfoldedControls else null,
+                    unfoldedControls = unfoldedControls,
                     onUnfoldedControls = ::chooseUnfoldedControls,
                     unfoldedControlsWithController = unfoldedControlsWithController,
                     onUnfoldedControlsWithController = ::chooseUnfoldedControlsWithController,
@@ -1163,6 +1155,14 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                     SessionAchievements(inFront.game, inFront.title, onClose = ::closeAchievements)
                 }
                 com.droiddeck.launcher.ui.AchievementNotificationOverlay()
+                com.droiddeck.launcher.session.DesktopComponents.asked?.let { ask ->  // sdl3deck: a desktop program's Windows components
+                    androidx.compose.runtime.key(ask) {  // a new request gets a fresh window
+                        LaunchedEffect(ask) { releasePads() }
+                        com.droiddeck.launcher.ui.WinComponentsDialog(ask.appKey, ask.name, ask.gameDir, false, compat = ask.compat) {
+                            if (com.droiddeck.launcher.session.DesktopComponents.asked === ask) com.droiddeck.launcher.session.DesktopComponents.asked = null
+                        }
+                    }
+                }
                 // Auto and Native resume on their own as the session comes back; only a failed resume needs the button.
                 val autoResume = suspendPolicy == SessionPrefs.SUSPEND_AUTO || suspendPolicy == SessionPrefs.SUSPEND_NATIVE
                 SessionPausedOverlay(
@@ -1642,8 +1642,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         steamDownloadsInBackground = SessionPrefs.steamDownloadsInBackground(this)
         oscMode = SessionPrefs.oscMode(this)
         backActionsInverted = SessionPrefs.backActionsInverted(this)
-        lowLatencyController = SessionPrefs.lowLatencyController(this)
-        lowLatencyTouch = SessionPrefs.lowLatencyTouch(this)
+        lowLatency = SessionPrefs.lowLatency(this)
         gameThreadHints = SessionPrefs.gameThreadHints(this)
         padType = SessionPrefs.steamController(this)
     }
@@ -1805,9 +1804,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         val driverId = if (CompositorHost.isStarted) null else turnip.install()
 
         val previous = SessionState.outputSize
-        val live = if (SessionState.followScreen && !isInPictureInPictureMode)
-            com.droiddeck.launcher.session.SessionDisplay.followSize(holder.surfaceFrame.width(), holder.surfaceFrame.height())
-        else null
+        val live = windowOutputSize(holder.surfaceFrame.width(), holder.surfaceFrame.height())
         val size = live ?: if (SessionState.running) previous else glassesOutputSize() ?: outputSize()
         SessionState.outputSize = size
         if (!SessionState.running) SessionState.refreshHz = refreshHz()
@@ -1864,7 +1861,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         )
         onOutputAttached(holder)
         if (SessionState.running && size != previous) {
-            Log.i(TAG, "follow screen: ${previous.first}x${previous.second} -> ${size.first}x${size.second} on a new surface")
+            Log.i(TAG, "output resized: ${previous.first}x${previous.second} -> ${size.first}x${size.second} on a new surface")
             WaylandCompositor.nativeResizeOutput(size.first, size.second)
         }
         if (!SessionState.running) SessionEvents.record("compositor.started")
@@ -1896,15 +1893,22 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
             cancelTouchGestures()
             Log.i(TAG, "surface resized to ${width}x$height - rebinding the compositor")
             CompositorHost.resize(holder.surface) { applyFrameGen() }
-            followWindow(width, height)
+            resizeOutputForWindow(width, height)
         }
     }
 
-    private fun followWindow(width: Int, height: Int) {
-        if (!SessionState.followScreen || isInPictureInPictureMode || !CompositorHost.isStarted) return
-        val size = com.droiddeck.launcher.session.SessionDisplay.followSize(width, height) ?: return
+    private fun windowOutputSize(width: Int, height: Int): Pair<Int, Int>? {
+        if (isInPictureInPictureMode || width <= 0 || height <= 0) return null
+        return if (SessionState.followScreen)
+            com.droiddeck.launcher.session.SessionDisplay.followSize(width, height, controlsBelowWanted())
+        else if (glassesScreen == null) outputSize() else null
+    }
+
+    private fun resizeOutputForWindow(width: Int, height: Int) {
+        if (!CompositorHost.isStarted) return
+        val size = windowOutputSize(width, height) ?: return
         if (size == SessionState.outputSize) return
-        Log.i(TAG, "follow screen: ${SessionState.outputSize.first}x${SessionState.outputSize.second} -> ${size.first}x${size.second}")
+        Log.i(TAG, "output resized: ${SessionState.outputSize.first}x${SessionState.outputSize.second} -> ${size.first}x${size.second}")
         SessionState.outputSize = size
         val panel = panelBounds()
         SessionState.upscaleRatio = maxOf(panel.width(), panel.height()).toFloat() / maxOf(size.first, size.second).coerceAtLeast(1)
@@ -1918,11 +1922,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     private fun applyFollowOrientation(config: android.content.res.Configuration) {
-        val wanted = if (SessionState.followScreen && config.smallestScreenWidthDp >= 600) {
-            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER
-        } else {
-            SessionPrefs.orientation(this)
-        }
+        val wanted = SessionPrefs.windowOrientation(this, SessionState.followScreen, config.smallestScreenWidthDp)
         if (requestedOrientation != wanted) requestedOrientation = wanted
     }
 
@@ -1934,6 +1934,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         cancelTouchGestures()
         applyFollowOrientation(newConfig)
         applyUnfoldedControls()
+        resizeOutputForWindow(surfaceW, surfaceH)
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -1975,7 +1976,8 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
             Library.drawsAtPanel(program) && !SessionPrefs.resolutionChosen(this, mode))
             com.droiddeck.launcher.session.SessionDisplay.MATCH_SCREEN
         else SessionPrefs.resolutionChoice(this, mode, panel)
-        return com.droiddeck.launcher.session.SessionDisplay.resolveChoice(panel, choice)
+        return com.droiddeck.launcher.session.SessionDisplay.resolveChoice(panel, choice,
+            SessionPrefs.portrait(this) && !controlsBelowWanted())
     }
 
     private fun refreshHz(): Float {
@@ -1994,7 +1996,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         GlassesRendering.mirrorRefreshLimit(glassesSettings, glasses, glassesScreen != null)
 
     private fun outputFpsLimit(): Int = SessionPrefs.compositorFpsLimit(
-        GlassesRendering.fpsLimit(SessionState.fpsLimit, mirrorRefreshLimit()), SessionState.performanceMode,
+        mirrorRefreshLimit(), SessionState.performanceMode,
     )
 
     private fun applyOutputPacing() {
@@ -2092,7 +2094,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
             return
         }
         Thread({
-            val hint = runtimeDamageHint() ?: sessionEndHint(SessionState.logFile)
+            val hint = runtimeDamageHint() ?: sessionEndHint(SessionState.logFile) ?: prootFailureHint()
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 showEnded(status, hint)
@@ -2153,6 +2155,12 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         if (broken.isEmpty()) return null
         Log.w(TAG, "runtime has ${broken.size} broken library link(s): ${broken.take(8).joinToString()}")
         return EndHint(resources.getQuantityString(R.plurals.session_end_runtime_damaged, broken.size, broken.size, broken.first()), repair = true)
+    }
+
+    private fun prootFailureHint(): EndHint? {
+        if (SessionState.failureCode != "PROOT_MISSING") return null
+        val message = SessionState.failureMessage ?: return null
+        return EndHint(message)
     }
 
     private fun sessionEndHint(log: File?): EndHint? {
@@ -2696,21 +2704,17 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         screenKeys?.refreshAppearance()
     }
 
+    private fun controlsBelowWanted(): Boolean {
+        if (!::sessionRoot.isInitialized || glassesScreen != null || cardboard.enabled) return false
+        return SessionPrefs.controlsBelowWanted(this, SessionState.mode, sessionRoot.width, sessionRoot.height,
+            pipUi || isInPictureInPictureMode)
+    }
+
     private fun applyUnfoldedControls() {
         if (!::sessionRoot.isInitialized) return
         val width = sessionRoot.width
         val height = sessionRoot.height
-        val wanted = com.droiddeck.launcher.session.SessionDisplay.unfoldedControlsWanted(
-            enabled = unfoldedControls,
-            foldable = com.droiddeck.launcher.session.SessionDisplay.foldable(this),
-            controllerConnected = PadBridge.anyControllerConnected() || SteamControllerBle.connected,
-            keepWithController = unfoldedControlsWithController,
-            steamDeckPad = SessionState.mode == SessionService.MODE_STEAM && SessionState.deckPad,
-            pip = pipUi || isInPictureInPictureMode,
-            width = width,
-            height = height,
-            smallestWidthDp = resources.configuration.smallestScreenWidthDp,
-        )
+        val wanted = controlsBelowWanted()
         val gameHeight = if (wanted) com.droiddeck.launcher.session.SessionDisplay.unfoldedGameHeight(width, height)
             else FrameLayout.LayoutParams.MATCH_PARENT
         val params = surfaceView.layoutParams as FrameLayout.LayoutParams
@@ -2720,13 +2724,19 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                 else "unfolded controls: game full screen")
         }
         var panel = unfoldedPanel
+        if (panel != null && panel.deckControls != SessionState.deckPad) {
+            sessionRoot.removeView(panel)
+            unfoldedPanel = null
+            panel = null
+        }
         if (!wanted) {
             if (panel != null) { sessionRoot.removeView(panel); unfoldedPanel = null; updateOnScreenControls() }
             return
         }
         if (panel == null) {
             panel = com.droiddeck.launcher.ui.DeckControlsPanel(this, onClose = { chooseUnfoldedControls(false) },
-                onSteamMenu = ::tapSteamButton, onQam = ::tapQam, pad = padBridge)
+                onSteamMenu = ::tapSteamButton, onQam = ::tapQam, pad = padBridge,
+                portraitDock = !com.droiddeck.launcher.session.SessionDisplay.foldable(this))
             sessionRoot.addView(panel, sessionRoot.indexOfChild(surfaceView) + 1)
             unfoldedPanel = panel
             updateOnScreenControls()
@@ -3162,7 +3172,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     override fun onPictureInPictureModeChanged(inPip: Boolean, newConfig: android.content.res.Configuration) {
         super.onPictureInPictureModeChanged(inPip, newConfig)
         if (::pip.isInitialized) pip.changed(inPip)
-        if (!inPip && surfaceW > 0) followWindow(surfaceW, surfaceH)
+        if (!inPip && surfaceW > 0) resizeOutputForWindow(surfaceW, surfaceH)
         applyUnfoldedControls()
         updateGlassesScreen()
     }
@@ -3636,10 +3646,10 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     private fun unbufferedSources() =
-        if (lowLatencyTouch) UNBUFFERED_SOURCES or InputDevice.SOURCE_CLASS_POINTER else UNBUFFERED_SOURCES
+        if (lowLatency) UNBUFFERED_SOURCES or InputDevice.SOURCE_CLASS_POINTER else UNBUFFERED_SOURCES
 
     private fun applyLowLatency() {
-        com.droiddeck.launcher.input.FakeInputWriter.setLowLatency(lowLatencyController, lowLatencyTouch)
+        com.droiddeck.launcher.input.FakeInputWriter.setLowLatency(lowLatency)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) window.decorView.requestUnbufferedDispatch(unbufferedSources())
     }
 

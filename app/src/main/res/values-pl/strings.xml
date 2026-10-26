@@ -247,8 +247,6 @@
     <string name="mode_ratio">Proporcje ekranu</string>
     <string name="mode_ratio_custom">Ustalane przez własną rozdzielczość.</string>
     <string name="mode_ratio_auto">Auto używa co najmniej 16:9.</string>
-    <string name="mode_fps">Limit klatek</string>
-    <string name="mode_fps_note">Ogranicza całą sesję. Wyświetlacz przełącza się na częstotliwość odświeżania będącą wielokrotnością limitu.</string>
     <string name="mode_hdr">HDR</string>
     <string name="mode_hdr10">Wyjście HDR10</string>
     <string name="mode_hdr_unavailable">Niedostępne: %1$s.</string>
@@ -2039,6 +2037,13 @@
     <string name="stores_play">Graj</string>
     <string name="stores_install">Zainstaluj</string>
     <string name="bnet_open">Otwórz Battle.net</string>
+    <string name="bnet_dl_starting">Uruchamianie programu pobierającego Blizzarda…</string>
+    <string name="bnet_dl_waiting">Oczekiwanie na zamknięcie Battle.net…</string>
+    <string name="bnet_dl_queued">Oczekiwanie na drugie pobieranie z Battle.net…</string>
+    <string name="bnet_dl_client_first">Otwórz Battle.net i zaloguj się raz, a potem instaluj jego gry tutaj.</string>
+    <string name="bnet_dl_failed">Program pobierający Blizzarda zatrzymał się: %1$s</string>
+    <string name="bnet_dl_agent_error">Błąd Blizzarda %1$s</string>
+    <string name="bnet_update">Aktualizuj</string>
     <string name="bnet_store">Gry Blizzarda</string>
     <string name="stores_resume_install">Wznów instalację</string>
     <string name="stores_dl_interrupted">Przerwano</string>

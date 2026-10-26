@@ -1,0 +1,148 @@
+#!/usr/bin/python3
+"""Windows components (Visual C++ runtimes, DirectX extras, .NET, XNA, ...) for a Windows program on the desktop.
+
+    droiddeck-windows-components FILE       pick them for FILE's prefix (the file manager's "Windows Components...")
+    droiddeck-windows-components --install  that file manager entry, for Windows programs
+
+FILE gets the prefix Run gives it (droiddeck-proton-run: a Steam game's, the prefix it sits in, a shortcut's, or one
+of its own). The components are picked in DroidDeck's own Windows components window -- the one its game settings
+show -- which opens over the desktop: DroidDeck's checked packages, recommendations from the program's folder, and
+the downloads are the app's. DroidDeck puts them in the prefix the next time the program starts (droiddeck-game-env,
+as for a game), so the program itself needs no change. Asking is a file in the session's launch folder, which the app
+watches (wincomponents-<prefix id>.request).
+"""
+import os
+import re
+import runpy
+import shutil
+import subprocess
+import sys
+
+BIN = "/usr/local/bin"
+PROTON_RUN = os.path.join(BIN, "droiddeck-proton-run")
+TYPES = ("application/x-ms-dos-executable", "application/x-msdownload",
+         "application/vnd.microsoft.portable-executable", "application/x-msi")
+WINDOWS = (".exe", ".msi")
+MENU_DIRS = ("/usr/share/kio/servicemenus",)
+MENU_FILE = "droiddeck-windows-components.desktop"
+MENU = """[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=%s;
+Actions=windowsComponents;
+X-KDE-Priority=TopLevel
+
+[Desktop Action windowsComponents]
+Name=Windows Components...
+Icon=run-build-install
+Exec=/usr/bin/python3 %s %%f
+""" % (";".join(TYPES), os.path.join(BIN, "droiddeck-windows-components"))
+
+
+def say(message):
+    print("droiddeck-windows-components: %s" % message, file=sys.stderr, flush=True)
+
+
+def notify(title, body, icon="dialog-information"):
+    if not os.environ.get("DBUS_SESSION_BUS_ADDRESS") or not shutil.which("notify-send"):
+        return
+    try:
+        subprocess.run(["notify-send", "-a", "DroidDeck", "-i", icon, title, body],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def write(path, text):
+    try:
+        with open(path, encoding="utf-8") as f:
+            if f.read() == text:
+                return
+    except OSError:
+        pass
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(path + ".tmp", path)
+
+
+def install():
+    """The file manager's entry; a home copy too when the system folder can't be written (it must be executable)."""
+    for folder in MENU_DIRS:
+        try:
+            os.makedirs(folder, exist_ok=True)
+            write(os.path.join(folder, MENU_FILE), MENU)
+            os.chmod(os.path.join(folder, MENU_FILE), 0o755)  # Plasma 6 trusts only executable menus in some places
+            return 0
+        except OSError as error:
+            say("%s: %s" % (folder, error))
+    home = os.path.join(os.environ.get("HOME") or "/root", ".local", "share", "kio", "servicemenus")
+    os.makedirs(home, exist_ok=True)
+    path = os.path.join(home, MENU_FILE)
+    write(path, MENU)
+    os.chmod(path, 0o755)
+    return 0
+
+
+def prefix_key(compatdata):
+    """The id DroidDeck keeps a prefix's components under: its compatdata folder's number, as droiddeck-game-env reads it."""
+    value = os.path.basename(compatdata.rstrip("/"))
+    if not re.fullmatch(r"-?[0-9]+", value):
+        return None
+    number = int(value)
+    if not -(2 ** 31) <= number < 2 ** 32 or number == 0:
+        return None
+    return str(number % 2 ** 32)
+
+
+def program_name(program, target):
+    if target.kind == "steam":
+        return os.path.basename(target.install.rstrip("/")) or os.path.basename(program)
+    return os.path.splitext(os.path.basename(program))[0]
+
+
+def clean(text):
+    return re.sub(r"[\x00-\x1f]+", " ", text).strip()[:120]
+
+
+def ask(program):
+    if not os.path.isfile(program) or not program.lower().endswith(WINDOWS):
+        say("%s is not a Windows program" % program)
+        notify("No Windows components for %s" % os.path.basename(program), "Pick a Windows program (.exe or .msi).",
+               "dialog-error")
+        return 2
+    launch = os.environ.get("BL_LAUNCH_DIR")
+    if not launch or not os.path.isdir(launch):
+        say("not inside a DroidDeck session (BL_LAUNCH_DIR unset)")
+        notify("Windows components", "This only works on DroidDeck's desktop.", "dialog-error")
+        return 69
+    run = runpy.run_path(PROTON_RUN, run_name="droiddeck_proton_run")
+    root = os.environ.get("STEAM_COMPAT_CLIENT_INSTALL_PATH") or run["STEAM_ROOT"]
+    target = run["locate"](program, root)
+    key = prefix_key(target.compatdata)
+    if key is None:
+        say("no prefix id for %s (%s)" % (program, target.compatdata))
+        notify("Windows components", "DroidDeck could not tell which prefix %s uses." % os.path.basename(program),
+               "dialog-error")
+        return 1
+    name = clean(program_name(program, target)) or "Windows program"
+    request = os.path.join(launch, "wincomponents-%s.request" % key)
+    with open(request + ".tmp", "w", encoding="utf-8") as f:
+        f.write("app=%s\nname=%s\ncompat=%s\ndir=%s\n" % (key, name, target.compatdata, os.path.dirname(program)))
+    os.replace(request + ".tmp", request)
+    say("%s: %s prefix %s (components key %s)" % (program, target.kind, target.compatdata, key))
+    notify("Windows components for %s" % name,
+           "Pick them in DroidDeck's window. They are added the next time %s starts." % name, "run-build-install")
+    return 0
+
+
+def main(argv):
+    if argv[:1] == ["--install"]:
+        return install()
+    if len(argv) != 1:
+        say("usage: droiddeck-windows-components FILE | --install")
+        return 2
+    return ask(os.path.abspath(argv[0]))
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

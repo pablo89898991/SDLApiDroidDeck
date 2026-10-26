@@ -247,8 +247,6 @@
     <string name="mode_ratio">Poměr stran obrazovky</string>
     <string name="mode_ratio_custom">Určen vlastním rozlišením.</string>
     <string name="mode_ratio_auto">Automaticky použije alespoň 16:9.</string>
-    <string name="mode_fps">Omezení snímků</string>
-    <string name="mode_fps_note">Omezuje celou relaci. Displej přejde na obnovovací frekvenci, kterou lze tímto limitem dělit beze zbytku.</string>
     <string name="mode_hdr">HDR</string>
     <string name="mode_hdr10">Výstup HDR10</string>
     <string name="mode_hdr_unavailable">Není k dispozici: %1$s.</string>
@@ -2039,6 +2037,13 @@
     <string name="stores_play">Hrát</string>
     <string name="stores_install">Instalovat</string>
     <string name="bnet_open">Otevřít Battle.net</string>
+    <string name="bnet_dl_starting">Spouštění stahovače Blizzardu…</string>
+    <string name="bnet_dl_waiting">Čekání na zavření Battle.net…</string>
+    <string name="bnet_dl_queued">Čekání na druhé stahování z Battle.net…</string>
+    <string name="bnet_dl_client_first">Otevřete Battle.net a jednou se přihlaste, pak instalujte jeho hry odsud.</string>
+    <string name="bnet_dl_failed">Stahovač Blizzardu se zastavil: %1$s</string>
+    <string name="bnet_dl_agent_error">Chyba Blizzardu %1$s</string>
+    <string name="bnet_update">Aktualizovat</string>
     <string name="bnet_store">Hry od Blizzardu</string>
     <string name="stores_resume_install">Pokračovat v instalaci</string>
     <string name="stores_dl_interrupted">Přerušeno</string>

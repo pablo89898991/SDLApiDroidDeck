@@ -32,6 +32,8 @@ sees the **real controller**, exactly as if it were plugged into a PC.
 - **Floating bubble**: tap to switch the SDL3 driver on or off, double tap for Steam Native Hook-up.
 - **Works on the desktop too**: every mode (present-as types and Hook-up) also works with Steam on DroidDeck's
   desktop, set up like a PC.
+- **Windows components for desktop programs**: right-click any Windows program on the desktop -> Windows
+  Components... to add Visual C++ runtimes, DirectX extras, .NET, XNA and more to its prefix.
 - **Auto-sync**: rebuilt on the newest upstream DroidDeck every day.
 
 ---
@@ -122,6 +124,20 @@ through Steam: add them to Steam as non-Steam games, or use Steam's Desktop Conf
 Like on a PC, Steam applies its **Desktop Layout** (mouse on a stick or trackpad, keys on buttons) to the controllers
 it drives while no game runs. Desktop programs also see a presented controller as an Xbox 360 pad, so both act at
 once. Turn the Desktop Layout off or change it in Steam's controller settings if you don't want that.
+
+### Windows components for desktop programs
+
+Windows programs on the desktop run with Proton (DroidDeck's Wine), each in its own prefix. To give one the runtimes
+it needs:
+
+1. In the file manager, right-click the `.exe` or `.msi` -> **Windows Components...**
+2. DroidDeck's Windows components window opens over the desktop for that program's prefix: the same catalog,
+   recommendations and downloads as a game's settings (Visual C++ runtimes, DirectX extras, .NET, XNA, fonts...).
+3. Pick what it needs. The components are added the next time the program starts, so close it first if it's
+   running.
+
+The picks belong to the prefix, so a Steam game's are the same as in its game settings. Use touch in the window:
+the bridged controller keeps driving the desktop meanwhile.
 
 ## Steam Controller (2026) over cable or puck
 
@@ -227,7 +243,7 @@ report at a time), with no taps lost instead of up to 4 in 10. When Steam reads 
 - **Steam started with `+controller_rate 500`**.
 - **Steam Input mouse clicks reach games**: upstream's Remote Play touch shim dropped every mouse click Steam
   sends (it couldn't find the real XTest function, which Steam loads privately). Fixed for every controller and
-  mode; keys and mouse movement were never affected.
+  mode; keys and mouse movement were never affected. Upstream now has the same fix, so it's kept as theirs.
 - **Controller-driven mouse works out of the box**: "Draw the cursor inside gamescope" (Performance -> Session
   fixes) starts on, so buttons bound to mouse clicks in Steam Input work. Turn it off for a little more speed if
   you never use controller mouse bindings.

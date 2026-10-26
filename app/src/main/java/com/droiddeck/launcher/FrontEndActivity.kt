@@ -169,6 +169,7 @@ class FrontEndActivity : ComponentActivity() {
     private var picturePosition by mutableStateOf("center")
     private var stretch16x9 by mutableStateOf(false)
     private var orientation by mutableStateOf(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE)
+    private var launcherOrientation by mutableStateOf(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER)
     private var launcherFullscreen by mutableStateOf(true)
     private var downloadSource by mutableStateOf(DownloadSource.MODE_AUTO)
     private var downloadMirror by mutableStateOf("")
@@ -392,7 +393,6 @@ class FrontEndActivity : ComponentActivity() {
     private var theme by mutableStateOf("graphite")
     private var appScale by mutableStateOf(com.droiddeck.launcher.core.AppUiPrefs.DEFAULT_SCALE)
     private var hdrOn by mutableStateOf(false)
-    private var fpsLimit by mutableStateOf(0)
     private var performanceMode by mutableStateOf(false)
     private var upscaler by mutableStateOf(0)
     private var upscaleSharpness by mutableStateOf(75)
@@ -776,7 +776,8 @@ class FrontEndActivity : ComponentActivity() {
         steamGamesX64 = cachedX64
         backActionsInverted = SessionPrefs.backActionsInverted(this)
         orientation = SessionPrefs.orientation(this)
-        requestedOrientation = orientation
+        launcherOrientation = com.droiddeck.launcher.core.AppUiPrefs.orientation(this)
+        requestedOrientation = launcherOrientation
         launcherFullscreen = SessionPrefs.launcherFullscreen(this)
         downloadSource = DownloadSource.mode(this)
         downloadMirror = DownloadSource.mirror(this)
@@ -845,6 +846,7 @@ class FrontEndActivity : ComponentActivity() {
                         phantomProcessStatus = phantomProcessStatus,
                         showPhantomGate = showPhantomGate,
                         orientation = orientation,
+                        launcherOrientation = launcherOrientation,
                         launcherFullscreen = launcherFullscreen,
                         downloadSource = downloadSource,
                         downloadMirror = downloadMirror,
@@ -1027,6 +1029,10 @@ class FrontEndActivity : ComponentActivity() {
                         onOrientation = { value ->
                             SessionPrefs.setOrientation(this, value)
                             orientation = value
+                        },
+                        onLauncherOrientation = { value ->
+                            com.droiddeck.launcher.core.AppUiPrefs.setOrientation(this, value)
+                            launcherOrientation = value
                             requestedOrientation = value
                         },
                         onLauncherFullscreen = { on ->
@@ -1302,23 +1308,6 @@ class FrontEndActivity : ComponentActivity() {
         }
     }
 
-    override fun onUserInteraction() {
-        super.onUserInteraction()
-        com.droiddeck.launcher.ui.Ambient.poke()
-    }
-
-    override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
-        if (event.actionMasked == android.view.MotionEvent.ACTION_UP || event.actionMasked == android.view.MotionEvent.ACTION_CANCEL) {
-            com.droiddeck.launcher.ui.Ambient.poke()
-        }
-        return super.dispatchTouchEvent(event)
-    }
-
-    override fun dispatchGenericMotionEvent(event: android.view.MotionEvent): Boolean {
-        com.droiddeck.launcher.ui.Ambient.poke()
-        return super.dispatchGenericMotionEvent(event)
-    }
-
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.keyCode == KeyEvent.KEYCODE_BUTTON_A) com.droiddeck.launcher.ui.HeldKeys.confirm = event.action == KeyEvent.ACTION_DOWN
         if (showComponents && (event.keyCode == KeyEvent.KEYCODE_BUTTON_L1 || event.keyCode == KeyEvent.KEYCODE_BUTTON_R1)) {
@@ -1339,13 +1328,13 @@ class FrontEndActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         orientation = SessionPrefs.orientation(this)
-        requestedOrientation = orientation
+        launcherOrientation = com.droiddeck.launcher.core.AppUiPrefs.orientation(this)
+        requestedOrientation = launcherOrientation
         refreshWifiDiscovery()
         com.droiddeck.launcher.stores.StoresState.refresh(this)
         com.droiddeck.launcher.stores.StoresState.libraryListener = { refreshAddedGames(); refresh() }
         com.droiddeck.launcher.stores.battlenet.BattleNetClient.opener = { args -> openBattleNet(args) }
         com.droiddeck.launcher.ui.Motion.refresh(this)
-        com.droiddeck.launcher.ui.Ambient.poke()
         com.droiddeck.launcher.ui.QuitFlood.take()?.let { c ->
             returning = ReturningFlood(c, com.droiddeck.launcher.ui.LaunchOrigin.takeReturn())
         }
@@ -1714,7 +1703,7 @@ class FrontEndActivity : ComponentActivity() {
             ModeSettings(
                 mode = mode, resolution = resolution,
                 panelSize = com.droiddeck.launcher.session.SessionDisplay.panelSize(this),
-                hdr = hdrOn, hdrReason = hdrReason, fpsLimit = fpsLimit, performanceMode = performanceMode,
+                hdr = hdrOn, hdrReason = hdrReason, performanceMode = performanceMode,
                 upscaler = upscaler, upscaleSharpness = upscaleSharpness,
                 gpuDrivers = drivers.summary(),
                 touchMode = touchMode,
@@ -1722,8 +1711,7 @@ class FrontEndActivity : ComponentActivity() {
                 steamDownloadsInBackground = steamDownloadsInBackground,
                 pipSupported = com.droiddeck.launcher.session.SessionPipController.supported(this),
                 pipAutoEnter = pipAutoEnter,
-                unfoldedControls = if (mode == SessionService.MODE_STEAM &&
-                    com.droiddeck.launcher.session.SessionDisplay.foldable(this)) unfoldedControls else null,
+                unfoldedControls = if (mode == SessionService.MODE_STEAM) unfoldedControls else null,
                 unfoldedControlsWithController = unfoldedControlsWithController,
                 oscMode = if (mode == SessionService.MODE_STEAM) oscMode else null,
                 backActionsInverted = backActionsInverted,
@@ -1780,7 +1768,6 @@ class FrontEndActivity : ComponentActivity() {
                 onResolution = { value -> SessionPrefs.setResolutionChoice(this, mode, value); resolution = value },
                 onHdr = { on -> SessionPrefs.setHdr(this, mode, on); hdrOn = on },
                 onGpuDrivers = { openComponents(focusContent = true, tab = com.droiddeck.launcher.ui.GPU_TAB) },
-                onFpsLimit = { fps -> SessionPrefs.setFpsLimit(this, mode, fps); fpsLimit = fps },
                 onPerformanceMode = { on -> SessionPrefs.setPerformanceMode(this, mode, on); performanceMode = on },
                 onUpscaler = { m -> SessionPrefs.setUpscaler(this, m); upscaler = m },
                 onUpscaleSharpness = { pct -> SessionPrefs.setUpscaleSharpness(this, pct); upscaleSharpness = pct },
@@ -2034,7 +2021,6 @@ class FrontEndActivity : ComponentActivity() {
         runSteamAtStartup = SessionPrefs.runSteamAtStartup(this)
         loadBootMovie()
         hdrOn = SessionPrefs.hdr(this, mode)
-        fpsLimit = SessionPrefs.fpsLimit(this, mode)
         performanceMode = SessionPrefs.performanceMode(this, mode)
         upscaler = SessionPrefs.upscaler(this)
         upscaleSharpness = SessionPrefs.upscaleSharpness(this)

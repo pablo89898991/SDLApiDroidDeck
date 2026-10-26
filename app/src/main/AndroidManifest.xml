@@ -77,7 +77,7 @@
         <activity
             android:name=".FrontEndActivity"
             android:exported="true"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="user"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboard|keyboardHidden|navigation">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -129,7 +129,7 @@
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:taskAffinity="${applicationId}.home"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="user"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -150,14 +150,14 @@
         <activity
             android:name=".files.FileManagerActivity"
             android:exported="false"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="user"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density"
             android:theme="@style/AppTheme" />
 
         <activity
             android:name=".files.FilePickerActivity"
             android:exported="false"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="user"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density"
             android:theme="@style/AppTheme" />
 
@@ -189,7 +189,7 @@
         <activity
             android:name=".stores.StoreLoginActivity"
             android:exported="false"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="user"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density"
             android:theme="@style/AppTheme" />
 

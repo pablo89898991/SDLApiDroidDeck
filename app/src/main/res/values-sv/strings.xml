@@ -247,8 +247,6 @@
     <string name="mode_ratio">Bildförhållande</string>
     <string name="mode_ratio_custom">Bestäms av den anpassade upplösningen.</string>
     <string name="mode_ratio_auto">Auto använder minst 16:9.</string>
-    <string name="mode_fps">Bildgräns</string>
-    <string name="mode_fps_note">Begränsar hela sessionen. Skärmen byter till en uppdateringsfrekvens som är en jämn multipel av gränsen.</string>
     <string name="mode_hdr">HDR</string>
     <string name="mode_hdr10">HDR10-utgång</string>
     <string name="mode_hdr_unavailable">Inte tillgängligt: %1$s.</string>
@@ -1997,6 +1995,13 @@
     <string name="stores_play">Spela</string>
     <string name="stores_install">Installera</string>
     <string name="bnet_open">Öppna Battle.net</string>
+    <string name="bnet_dl_starting">Startar Blizzards nedladdare…</string>
+    <string name="bnet_dl_waiting">Väntar på att Battle.net stängs…</string>
+    <string name="bnet_dl_queued">Väntar på den andra Battle.net-nedladdningen…</string>
+    <string name="bnet_dl_client_first">Öppna Battle.net och logga in en gång, installera sedan dess spel här.</string>
+    <string name="bnet_dl_failed">Blizzards nedladdare stoppades: %1$s</string>
+    <string name="bnet_dl_agent_error">Blizzard-fel %1$s</string>
+    <string name="bnet_update">Uppdatera</string>
     <string name="bnet_store">Blizzard-spel</string>
     <string name="stores_resume_install">Återuppta installation</string>
     <string name="stores_dl_interrupted">Avbruten</string>

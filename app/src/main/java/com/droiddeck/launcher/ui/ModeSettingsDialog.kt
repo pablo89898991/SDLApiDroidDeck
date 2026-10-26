@@ -60,7 +60,6 @@ class ModeSettings(
     val hdr: Boolean,
     val hdrReason: String?,
     val gpuDrivers: String? = null,
-    val fpsLimit: Int = 0,
     val performanceMode: Boolean = false,
     val upscaler: Int = 0,
     val upscaleSharpness: Int = 75,
@@ -117,7 +116,6 @@ class ModeSettingsActions(
     val onResolution: (String) -> Unit,
     val onHdr: (Boolean) -> Unit,
     val onGpuDrivers: () -> Unit = {},
-    val onFpsLimit: (Int) -> Unit = {},
     val onPerformanceMode: (Boolean) -> Unit = {},
     val onUpscaler: (Int) -> Unit = {},
     val onUpscaleSharpness: (Int) -> Unit = {},
@@ -212,9 +210,16 @@ fun ModeSheetRows(s: ModeSettings, a: ModeSettingsActions, tab: String, extras: 
     val host = rememberMenuHost()
     var explainWifiDiscovery by remember { mutableStateOf(false) }
     if (tab == SheetTab.DISPLAY) {
-        val displaySize = com.droiddeck.launcher.session.SessionDisplay.resolveChoice(s.panelSize, s.resolution)
+        val context = LocalContext.current
+        val portraitWindow = SessionPrefs.portrait(context)
+        val longSide = maxOf(s.panelSize.first, s.panelSize.second)
+        val shortSide = minOf(s.panelSize.first, s.panelSize.second)
+        val controlsBelow = SessionPrefs.controlsBelowWanted(context, s.mode,
+            if (portraitWindow) shortSide else longSide, if (portraitWindow) longSide else shortSide)
+        val portrait = portraitWindow && !controlsBelow
+        val displaySize = com.droiddeck.launcher.session.SessionDisplay.resolveChoice(s.panelSize, s.resolution, portrait)
         SettingsGroup(stringResource(R.string.display_session)) {
-            ResolutionRow(host, s.resolution, s.panelSize, a.onResolution)
+            ResolutionRow(host, s.resolution, s.panelSize, a.onResolution, portrait = portrait)
             s.picturePosition?.let { position ->
                 ChoiceRow(host, "picture-position", stringResource(R.string.display_picture_position), null,
                     listOf("top" to stringResource(R.string.display_position_top),
@@ -246,8 +251,6 @@ fun ModeSheetRows(s: ModeSettings, a: ModeSettingsActions, tab: String, extras: 
         SettingsGroup(stringResource(R.string.display_frame_rate)) {
             ToggleRow(host, "performance", stringResource(R.string.mode_performance), stringResource(R.string.mode_performance_hint),
                 s.performanceMode, onChange = a.onPerformanceMode)
-            ChoiceRow(host, "fps", stringResource(R.string.mode_fps), stringResource(R.string.common_applies_next_session),
-                SessionPrefs.fpsLimitChoices(LocalContext.current), s.fpsLimit, note = stringResource(R.string.mode_fps_note), onPick = a.onFpsLimit)
         }
         SettingsGroup(stringResource(R.string.mode_hdr)) {
             ToggleRow(

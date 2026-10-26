@@ -247,8 +247,6 @@
     <string name="mode_ratio">螢幕比例</string>
     <string name="mode_ratio_custom">由自訂解像度決定。</string>
     <string name="mode_ratio_auto">自動模式至少使用 16:9。</string>
-    <string name="mode_fps">幀率限制</string>
-    <string name="mode_fps_note">限制整個會話的幀率。螢幕會切換至能被此上限整除的刷新率。</string>
     <string name="mode_hdr">HDR</string>
     <string name="mode_hdr10">HDR10 輸出</string>
     <string name="mode_hdr_unavailable">不可用：%1$s。</string>
@@ -1979,6 +1977,13 @@
     <string name="stores_play">開啟遊戲</string>
     <string name="stores_install">安裝</string>
     <string name="bnet_open">開啟 Battle.net</string>
+    <string name="bnet_dl_starting">正在啟動暴雪下載器…</string>
+    <string name="bnet_dl_waiting">正在等待 Battle.net 關閉…</string>
+    <string name="bnet_dl_queued">正在等待另一個 Battle.net 下載…</string>
+    <string name="bnet_dl_client_first">請先開啟 Battle.net 並登入一次，然後在這裡安裝其遊戲。</string>
+    <string name="bnet_dl_failed">暴雪下載器已停止：%1$s</string>
+    <string name="bnet_dl_agent_error">暴雪錯誤 %1$s</string>
+    <string name="bnet_update">更新</string>
     <string name="bnet_store">Blizzard 遊戲</string>
     <string name="stores_resume_install">繼續安裝</string>
     <string name="stores_dl_interrupted">已中斷</string>

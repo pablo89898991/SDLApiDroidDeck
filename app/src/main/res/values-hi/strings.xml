@@ -247,8 +247,6 @@
     <string name="mode_ratio">स्क्रीन रेशियो</string>
     <string name="mode_ratio_custom">कस्टम रिज़ॉल्यूशन से तय होता है।</string>
     <string name="mode_ratio_auto">ऑटो कम से कम 16:9 इस्तेमाल करता है।</string>
-    <string name="mode_fps">फ़्रेम सीमा</string>
-    <string name="mode_fps_note">पूरे सेशन को सीमित करता है। डिस्प्ले उस रिफ्रेश रेट पर चला जाता है जिसे यह सीमा बराबर बांटती है।</string>
     <string name="mode_hdr">HDR</string>
     <string name="mode_hdr10">HDR10 आउटपुट</string>
     <string name="mode_hdr_unavailable">उपलब्ध नहीं: %1$s।</string>
@@ -1997,6 +1995,13 @@
     <string name="stores_play">Play</string>
     <string name="stores_install">इंस्टॉल करें</string>
     <string name="bnet_open">Battle.net खोलें</string>
+    <string name="bnet_dl_starting">Blizzard का डाउनलोडर शुरू हो रहा है…</string>
+    <string name="bnet_dl_waiting">Battle.net के बंद होने का इंतज़ार…</string>
+    <string name="bnet_dl_queued">दूसरे Battle.net डाउनलोड का इंतज़ार…</string>
+    <string name="bnet_dl_client_first">Battle.net खोलें और एक बार साइन इन करें, फिर इसके गेम यहाँ से इंस्टॉल करें।</string>
+    <string name="bnet_dl_failed">Blizzard का डाउनलोडर रुक गया: %1$s</string>
+    <string name="bnet_dl_agent_error">Blizzard त्रुटि %1$s</string>
+    <string name="bnet_update">अपडेट करें</string>
     <string name="bnet_store">Blizzard के गेम</string>
     <string name="stores_resume_install">इंस्टॉल फिर से शुरू करें</string>
     <string name="stores_dl_interrupted">बाधित</string>

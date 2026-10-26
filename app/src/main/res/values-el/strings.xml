@@ -247,8 +247,6 @@
     <string name="mode_ratio">Αναλογία οθόνης</string>
     <string name="mode_ratio_custom">Καθορίζεται από την προσαρμοσμένη ανάλυση.</string>
     <string name="mode_ratio_auto">Το Αυτόματο χρησιμοποιεί τουλάχιστον 16:9.</string>
-    <string name="mode_fps">Όριο καρέ</string>
-    <string name="mode_fps_note">Περιορίζει ολόκληρη τη συνεδρία. Η οθόνη μεταβαίνει σε ρυθμό ανανέωσης που διαιρείται ακριβώς με το όριο.</string>
     <string name="mode_hdr">HDR</string>
     <string name="mode_hdr10">Έξοδος HDR10</string>
     <string name="mode_hdr_unavailable">Μη διαθέσιμο: %1$s.</string>
@@ -1997,6 +1995,13 @@
     <string name="stores_play">Αναπαραγωγή</string>
     <string name="stores_install">Εγκατάσταση</string>
     <string name="bnet_open">Άνοιγμα του Battle.net</string>
+    <string name="bnet_dl_starting">Εκκίνηση του προγράμματος λήψης της Blizzard…</string>
+    <string name="bnet_dl_waiting">Αναμονή για κλείσιμο του Battle.net…</string>
+    <string name="bnet_dl_queued">Αναμονή για την άλλη λήψη από το Battle.net…</string>
+    <string name="bnet_dl_client_first">Ανοίξτε το Battle.net και συνδεθείτε μία φορά, έπειτα εγκαταστήστε τα παιχνίδια του από εδώ.</string>
+    <string name="bnet_dl_failed">Το πρόγραμμα λήψης της Blizzard σταμάτησε: %1$s</string>
+    <string name="bnet_dl_agent_error">Σφάλμα Blizzard %1$s</string>
+    <string name="bnet_update">Ενημέρωση</string>
     <string name="bnet_store">Παιχνίδια της Blizzard</string>
     <string name="stores_resume_install">Συνέχιση εγκατάστασης</string>
     <string name="stores_dl_interrupted">Διακόπηκε</string>

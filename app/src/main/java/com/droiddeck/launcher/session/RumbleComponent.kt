@@ -96,6 +96,7 @@ class RumbleComponent : SessionPart() {
 
     @Synchronized private fun buzz(strong: Int, weak: Int, ms: Int, slot: Int) {
         if (!enabled || quiet) return
+        if (com.droiddeck.launcher.input.DualSenseBridge.routeRumble(slot, strong, weak, ms)) return  // sdl3deck
         val target = target(slot)
         val previous = playing[slot]
         if (target !== previous) {

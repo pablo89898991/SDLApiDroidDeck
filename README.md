@@ -40,6 +40,8 @@ sees the **real controller**, exactly as if it were plugged into a PC.
   and open Wine Configuration, Registry Editor, Uninstall Programs, Command Prompt and more.
 - **Settings -> Wine**: see the installed and newest Wine (Proton), update it, check now, or turn automatic updates
   off.
+- **Easy Anti-Cheat games start offline** even when their anti-cheat launcher has another name (instead of "Failed
+  to initialize Wine helper buffer"). Online modes that need Easy Anti-Cheat stay unavailable.
 - **Auto-sync**: rebuilt on the newest upstream DroidDeck every day.
 
 ---

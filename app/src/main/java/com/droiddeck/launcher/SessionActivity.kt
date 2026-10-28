@@ -68,6 +68,7 @@ import com.droiddeck.launcher.gpu.ScreenEffects
 import com.droiddeck.launcher.gpu.Lossless
 import com.droiddeck.launcher.gpu.TurnipDriver
 import com.droiddeck.launcher.input.EvdevKeys
+import com.droiddeck.launcher.input.HomeGuideInput
 import com.droiddeck.launcher.input.InputSpace
 import com.droiddeck.launcher.input.KeyboardHost
 import com.droiddeck.launcher.input.ControllerPrefs
@@ -356,6 +357,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var glassesOutputActive by mutableStateOf(false)
     private var pausedFrame by mutableStateOf<com.droiddeck.launcher.ui.PausedFrame?>(null)
     private var pausedFrameWanted = false
+    private var pauseAnimated by mutableStateOf(false)
     private var trackingRecovery by mutableStateOf<TrackingRecovery?>(null)
     private var glasses3dForVr = false
     private var ended = false
@@ -1114,6 +1116,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                     pipSupported = com.droiddeck.launcher.session.SessionPipController.supported(this@SessionActivity),
                     pipAutoEnter = pipAutoEnter,
                     onPip = { pip.enter() },
+                    onPause = ::pauseNow,
                     onPipAutoEnter = { on ->
                         SessionPrefs.setPipAutoEnter(this@SessionActivity, on)
                         pipAutoEnter = on
@@ -1191,17 +1194,22 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                 }
                 // Auto and Native resume on their own as the session comes back; only a failed resume needs the button.
                 val autoResume = suspendPolicy == SessionPrefs.SUSPEND_AUTO || suspendPolicy == SessionPrefs.SUSPEND_NATIVE
+                LaunchedEffect(SessionState.manualPause, SessionState.suspended) {
+                    if (!SessionState.manualPause && !SessionState.suspended) pauseAnimated = false
+                }
                 SessionPausedOverlay(
-                    suspended = SessionState.suspended && (!autoResume || SessionState.resumeFailed),
+                    suspended = SessionState.suspended && (!autoResume || SessionState.resumeFailed || SessionState.manualPause),
                     engaged = SessionState.resumeRequested || SessionState.resuming,
                     failures = SessionState.resumeFailures,
                     frame = pausedFrame,
+                    animateIn = pauseAnimated,
                     title = pausedTitle(),
                     onResume = { SessionService.resume(this@SessionActivity) },
                     onFrameNeeded = ::requestPausedFrame,
                     onHidden = {
                         pausedFrame = null
                         pausedFrameWanted = false
+                        pauseAnimated = false
                     },
                 )
                 if (leaving) com.droiddeck.launcher.ui.FloodSpread(
@@ -1347,7 +1355,8 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         if (incoming?.action != SessionService.ACTION_HOME_GUIDE) return
         incoming.action = null
         setIntent(incoming)
-        if (SessionState.running && SessionState.mode == SessionService.MODE_STEAM) sendSteamGuide()
+        if (SessionState.suspended) SessionService.resume(this)
+        else if (SessionState.running && SessionState.mode == SessionService.MODE_STEAM) sendSteamGuide()
     }
 
 
@@ -2208,9 +2217,17 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                 if (line.contains(FEX_MISSING)) fexMissing = true
             }
             val steamSetup = com.droiddeck.launcher.session.SteamClientSetupFailure.find(text.lineSequence())
+            val launchFailure = com.droiddeck.launcher.session.SessionLaunchFailure.find(text.lineSequence())
             if (steamSetup != null) {
                 val message = getString(if (steamSetup.download) R.string.session_end_steam_download else R.string.session_end_steam_setup)
                 EndHint(listOfNotNull(message, steamSetup.curlError).joinToString("\n"))
+            } else if (launchFailure == com.droiddeck.launcher.session.SessionLaunchFailure.STEAM_ILLEGAL_INSTRUCTION) {
+                val message = getString(R.string.session_end_steam_sigill)
+                val fallback = if (SessionState.steamClientArch == "arm64") getString(R.string.session_end_steam_try_x64) else null
+                EndHint(listOfNotNull(message, fallback).joinToString("\n"))
+            } else if (launchFailure == com.droiddeck.launcher.session.SessionLaunchFailure.VULKAN_DEVICE_MISSING) {
+                val adreno = com.droiddeck.launcher.gpu.GpuInfo.detect().family != com.droiddeck.launcher.gpu.GpuInfo.Family.NOT_ADRENO
+                EndHint(getString(if (adreno) R.string.session_end_vulkan_device else R.string.session_end_gpu_unsupported))
             } else if (fexMissing) {
                 val what = com.droiddeck.launcher.frontend.Library.nameForProgram(SessionState.program) ?: getString(R.string.session_end_program)
                 EndHint(getString(R.string.session_end_fex_missing, what), evenOnSuccess = true)
@@ -2226,8 +2243,20 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         when (event.keyCode) {
-            KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_MUTE ->
+            KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_MUTE -> {
+                val steamVolume =
+                    SessionState.mode == SessionService.MODE_STEAM && SessionState.running &&
+                    SessionState.firstFrameSeen && !SessionState.suspended && !ended &&
+                    !pipUi && !drawerOpen && !pcKeyboardOpen && !achievementsOpen &&
+                    !gestureSettingsOpen && !screenKeyTextFocus && window.decorView.hasWindowFocus()
+                if (steamVolume) {
+                    val audio = getSystemService(android.media.AudioManager::class.java)
+                    if (com.droiddeck.launcher.input.SteamVolumeKeys.dispatch(event, !audio.isVolumeFixed) { direction ->
+                            audio.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, direction, 0)
+                        }) return true
+                }
                 return super.dispatchKeyEvent(event)
+            }
         }
         val backToQam = !pipUi && !screenKeyTextFocus && !drawerOpen && !pcKeyboardOpen && !achievementsOpen &&
             SessionState.mode == SessionService.MODE_STEAM && SessionState.running && SessionState.firstFrameSeen &&
@@ -2295,7 +2324,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
             return true
         }
         val resumeKey = event.keyCode == KeyEvent.KEYCODE_BUTTON_A || event.keyCode == KeyEvent.KEYCODE_BUTTON_START ||
-            event.keyCode == KeyEvent.KEYCODE_BUTTON_MODE || event.keyCode == KeyEvent.KEYCODE_HOME
+            event.keyCode == KeyEvent.KEYCODE_BUTTON_MODE || HomeGuideInput.isHome(event.keyCode)
         val resumeKeyId = event.deviceId to event.keyCode
         if (fromController && resumeKey && (SessionState.suspended || resumeKeyId in resumeKeysDown)) {
             if (event.action == KeyEvent.ACTION_DOWN) {
@@ -3111,10 +3140,10 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     // The frozen game cannot draw again, so the paused overlay shows a copy taken while the surface still holds its frame.
-    private fun capturePausedFrame() {
+    private fun capturePausedFrame(manual: Boolean = false) {
         if (!SessionState.running || pipUi || isInPictureInPictureMode || glassesOutputActive) return
         if (SessionState.suspended && pausedFrame != null) return
-        if (suspendPolicy == SessionPrefs.SUSPEND_NEVER || !::surfaceView.isInitialized) return
+        if ((suspendPolicy == SessionPrefs.SUSPEND_NEVER && !manual && !SessionState.manualPause) || !::surfaceView.isInitialized) return
         if (surfaceView.holder.surface?.isValid != true) return
         val width = surfaceView.width
         val height = surfaceView.height
@@ -3144,6 +3173,15 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         } catch (_: IllegalArgumentException) {
             bitmap.recycle()
         }
+    }
+
+    private fun pauseNow() {
+        if (!SessionState.running || SessionState.suspended) return
+        pauseAnimated = true
+        drawerOpen = false
+        pausedFrame = null
+        capturePausedFrame(manual = true)
+        SessionService.pause(this)
     }
 
     // Sessions that froze from picture-in-picture, or before onPause could copy a frame, have none; the
@@ -3309,7 +3347,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
             enabled = {
                 resumed && window.decorView.hasWindowFocus() && !ended && !drawerOpen && !pcKeyboardOpen &&
                     !achievementsOpen && !gestureSettingsOpen && !pipUi && SessionState.running && !SessionState.suspended &&
-                    SessionState.mode == SessionService.MODE_STEAM && padBridge?.canHoldGuide() == true
+                    SessionState.mode == SessionService.MODE_STEAM && padBridge != null
             },
             setPressed = { padBridge?.setHomeGuidePressed(it) },
             onCancel = { padBridge?.cancelHomeGuide() },

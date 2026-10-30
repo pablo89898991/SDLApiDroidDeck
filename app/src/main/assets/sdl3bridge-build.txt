@@ -1,3 +1,3 @@
 repo=embedded
-tag=SdlBridge 5b0b8f4
+tag=SdlBridge ab9167d
 sdl=3.4.18

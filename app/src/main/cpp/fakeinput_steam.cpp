@@ -96,6 +96,7 @@ static constexpr unsigned int FAKE_INPUT_MAJOR = 13;
 static constexpr unsigned int FAKE_INPUT_EVENT_MINOR_BASE = 64;
 static constexpr unsigned int FAKE_INPUT_JS_MINOR_BASE = 0;
 static constexpr int UINPUT_EVENT_BASE = 16;
+static constexpr int MOUSE_EVENT_SLOT = 4;
 static constexpr int UINPUT_EVENT_LIMIT = 64;
 static constexpr uint32_t UINPUT_DESCRIPTION_MAGIC = 0x46495544;
 
@@ -124,6 +125,14 @@ static constexpr size_t FAKE_INPUT_RING_HEADER_SIZE =
 static constexpr size_t FAKE_INPUT_RING_SIZE =
     FAKE_INPUT_RING_HEADER_SIZE +
     (FAKE_INPUT_RING_CAPACITY * FAKE_INPUT_EVENT_SIZE);
+static constexpr size_t DECK_IMU_BLOCK_SIZE = 64;
+static constexpr size_t FAKE_INPUT_RING_PAD_TYPE_OFFSET = 44;
+static constexpr uint32_t PAD_TYPE_DECK = 0, PAD_TYPE_STEAM = 1, PAD_TYPE_XBOX = 2, PAD_TYPE_DS4 = 3,
+                          PAD_TYPE_DUALSENSE = 4, PAD_TYPE_DUALSENSE_EDGE = 6,
+                          PAD_TYPE_STEAM_2015 = 7,
+                          PAD_TYPE_NONE = 8, PAD_TYPE_LAST = PAD_TYPE_NONE,
+                          PAD_TYPE_MOUSE = 5;
+static constexpr uint32_t PAD_TYPE_SET = 0x80000000u;
 
 struct UinputDescription {
   uint32_t magic;
@@ -152,6 +161,7 @@ struct FakeController {
   size_t mapping_size = 0;
   bool closed = false;
   bool needs_keyframe = true;
+  bool mouse = false;
 
   ~FakeController() {
     if (ring) munmap(ring, mapping_size);
@@ -613,7 +623,7 @@ open_fake_input_ring(const char *event, int flags) {
   int slot = get_event_number(event);
   bool virtual_pad = slot >= UINPUT_EVENT_BASE;
   std::string ring_path = virtual_pad ? uinput_ring_path(slot) : get_ring_path_for_slot(slot);
-  size_t mapping_size = virtual_pad ? UINPUT_FILE_SIZE : FAKE_INPUT_RING_SIZE;
+  size_t mapping_size = virtual_pad ? UINPUT_FILE_SIZE : FAKE_INPUT_RING_SIZE + DECK_IMU_BLOCK_SIZE;
   if (ring_path.empty()) {
     Logger::log("No input ring is configured for %s (slot %d)\n", event, slot);
     errno = ENODEV;
@@ -657,9 +667,22 @@ open_fake_input_ring(const char *event, int flags) {
   controller->uinput = description;
   controller->mapping_size = mapping_size;
   controller->generation = ring_generation(ring);
+  if (!virtual_pad) {
+    uint32_t pad_type = __atomic_load_n(
+        reinterpret_cast<volatile uint32_t *>(static_cast<uint8_t *>(mapping) + FAKE_INPUT_RING_SIZE +
+                                              FAKE_INPUT_RING_PAD_TYPE_OFFSET),
+        __ATOMIC_ACQUIRE);
+    controller->mouse = (pad_type & PAD_TYPE_SET) && (pad_type & ~PAD_TYPE_SET) == PAD_TYPE_MOUSE;
+  }
   SnapshotState snap;
-  if (read_snapshot(ring, snap) && snap.generation == controller->generation)
-    capture_keyframe(*controller, snap);
+  if (read_snapshot(ring, snap) && snap.generation == controller->generation) {
+    if (controller->mouse) {
+      controller->read_seq = snap.write_seq;
+      controller->needs_keyframe = false;
+    } else {
+      capture_keyframe(*controller, snap);
+    }
+  }
   {
     std::lock_guard<std::recursive_mutex> guard(controller_mutex());
     controller_map()[fd] = controller;
@@ -1190,7 +1213,8 @@ struct DeckImu {
   uint32_t pad_type;
   uint32_t latency;
 };
-static_assert(offsetof(DeckImu, pad_type) == 44, "DeckImu::pad_type matches FakeInputWriter");
+static_assert(offsetof(DeckImu, pad_type) == FAKE_INPUT_RING_PAD_TYPE_OFFSET,
+                "DeckImu::pad_type matches FakeInputWriter and the ring reader");
 static_assert(offsetof(DeckImu, latency) == 48, "DeckImu::latency matches FakeInputWriter");
 static constexpr uint32_t LATENCY_CONTROLLER = 1, LATENCY_TOUCH = 2;
 static constexpr int LOW_LATENCY_REPORT_INTERVAL_US = 1000;
@@ -1207,7 +1231,6 @@ struct DeckExtras {
   uint32_t controls = 0;
 };
 static constexpr uint32_t DECK_IMU_MAGIC = 0x31554D49;
-static constexpr size_t DECK_IMU_BLOCK_SIZE = 64;
 static_assert(sizeof(DeckImu) <= DECK_IMU_BLOCK_SIZE, "the IMU block is 64 bytes in the ring file");
 
 struct TritonSharedData {
@@ -1303,12 +1326,6 @@ static bool fake_deck_enabled() {
   if (enabled < 0) enabled = getenv("FAKE_EVDEV_DECK") && atoi(getenv("FAKE_EVDEV_DECK")) ? 1 : 0;
   return enabled == 1;
 }
-
-static constexpr uint32_t PAD_TYPE_DECK = 0, PAD_TYPE_STEAM = 1, PAD_TYPE_XBOX = 2, PAD_TYPE_DS4 = 3,
-                          PAD_TYPE_DUALSENSE = 4, PAD_TYPE_DUALSENSE_EDGE = 5,
-                          PAD_TYPE_STEAM_2015 = 6,
-                          PAD_TYPE_NONE = 7, PAD_TYPE_LAST = PAD_TYPE_NONE;
-static constexpr uint32_t PAD_TYPE_SET = 0x80000000u;
 
 __attribute__((visibility("hidden"))) static uint32_t session_pad_type() {
   static int type = -1;
@@ -1537,6 +1554,12 @@ __attribute__((visibility("hidden"))) static bool is_withdrawn_pad_path(const ch
   if (strncmp(event, "event", 5) && strncmp(event, "js", 2)) return false;
   int number = get_event_number(event);
   if (number < 0 || number >= UINPUT_EVENT_BASE) return false;
+  if (number == MOUSE_EVENT_SLOT && !strncmp(event, "event", 5)) {
+    char *fake = from_real_to_fake_path(pathname);
+    bool exposed = fake && path_exists(fake);
+    free(fake);
+    return !exposed;
+  }
   if (desktop_session()) return process_is_steam_client() ? number == 0 : started_by_steam();  // sdl3bridge
   return number == 0 || !process_is_steam_client();
 }
@@ -2474,11 +2497,11 @@ __attribute__((visibility("hidden"))) static unsigned pad_type_minor(uint32_t ty
 
 __attribute__((visibility("hidden"))) static void *pad_type_thread(void *) {
   static const char *kNames[] = {"Steam Deck controller", "Steam Controller", "Xbox 360 controller",
-                                 "DualShock 4", "DualSense", "DualSense Edge",
+                                 "DualShock 4", "DualSense", "mouse", "DualSense Edge",
                                  "Steam Controller (2015)", "no pad"};
   uint32_t was = live_pad_type();
   bool paired = fake_triton_enabled() && triton_connected();
-  Logger::log("pad: a %s at start%s\n", kNames[was % 8], paired ? ", the paired Steam Controller connected" : "");
+  Logger::log("pad: a %s at start%s\n", kNames[was % 9], paired ? ", the paired Steam Controller connected" : "");
   for (;;) {
     struct timespec interval = {0, 50 * 1000 * 1000};
     nanosleep(&interval, nullptr);
@@ -5221,6 +5244,85 @@ static int copy_ioctl_bits(int op, void *destination, const unsigned char (&bits
   return static_cast<int>(size);
 }
 
+static constexpr uint16_t MOUSE_VENDOR_ID = 0x1dd1;
+static constexpr uint16_t MOUSE_PRODUCT_ID = 0x0004;
+
+static int ioctl_mouse(int op, void *argp) {
+  int type = (op >> 8 & 0xFF);
+  int number = (op >> 0 & 0xFF);
+  if (type != 0x45) {
+    errno = EINVAL;
+    return -1;
+  }
+  switch (number) {
+    case 0x01: {
+      int version = 65536;
+      memcpy(argp, &version, sizeof(int));
+      return 0;
+    }
+    case 0x02: {
+      struct input_id id;
+      memset(&id, 0, sizeof(id));
+      id.bustype = 0x03;
+      id.vendor = MOUSE_VENDOR_ID;
+      id.product = MOUSE_PRODUCT_ID;
+      id.version = 1;
+      memcpy(argp, &id, sizeof(id));
+      return 0;
+    }
+    case 0x06:
+      if (argp && _IOC_SIZE(op)) snprintf(static_cast<char *>(argp), _IOC_SIZE(op), "DroidDeck Mouse");
+      return 0;
+    case 0x07:
+      if (argp && _IOC_SIZE(op)) snprintf(static_cast<char *>(argp), _IOC_SIZE(op), "usb-droiddeck/mouse");
+      return 0;
+    case 0x08:
+      if (argp && _IOC_SIZE(op)) static_cast<char *>(argp)[0] = '\0';
+      return 0;
+    case 0x09: {
+      unsigned char bitmask[(INPUT_PROP_MAX + 8) / 8] = {};
+      bitmask[INPUT_PROP_POINTER / 8] |= 1 << (INPUT_PROP_POINTER % 8);
+      return copy_ioctl_bits(op, argp, bitmask);
+    }
+    case 0x18: {
+      unsigned char bitmask[(KEY_MAX + 8) / 8] = {};
+      return copy_ioctl_bits(op, argp, bitmask);
+    }
+    case 0x20: {
+      unsigned char bitmask[(EV_MAX + 8) / 8] = {};
+      bitmask[EV_SYN / 8] |= 1 << (EV_SYN % 8);
+      bitmask[EV_KEY / 8] |= 1 << (EV_KEY % 8);
+      bitmask[EV_REL / 8] |= 1 << (EV_REL % 8);
+      bitmask[EV_MSC / 8] |= 1 << (EV_MSC % 8);
+      return copy_ioctl_bits(op, argp, bitmask);
+    }
+    case 0x21: {
+      unsigned char bitmask[(KEY_MAX + 8) / 8] = {};
+      for (int button = BTN_LEFT; button <= BTN_TASK; button++)
+        if (button <= BTN_MIDDLE || button == BTN_SIDE || button == BTN_EXTRA)
+          bitmask[button / 8] |= 1 << (button % 8);
+      return copy_ioctl_bits(op, argp, bitmask);
+    }
+    case 0x22: {
+      unsigned char bitmask[(REL_MAX + 8) / 8] = {};
+      for (uint16_t code : {REL_X, REL_Y, REL_WHEEL, REL_HWHEEL, REL_WHEEL_HI_RES, REL_HWHEEL_HI_RES})
+        bitmask[code / 8] |= 1 << (code % 8);
+      return copy_ioctl_bits(op, argp, bitmask);
+    }
+    case 0x23: {
+      unsigned char bitmask[(ABS_MAX + 8) / 8] = {};
+      return copy_ioctl_bits(op, argp, bitmask);
+    }
+    case 0x35: {
+      unsigned char bitmask[(FF_MAX + 8) / 8] = {};
+      return copy_ioctl_bits(op, argp, bitmask);
+    }
+    default:
+      errno = EINVAL;
+      return -1;
+  }
+}
+
 static bool wait_snapshot(std::shared_ptr<FakeController> fake,
                           std::unique_lock<std::recursive_mutex> &guard,
                           SnapshotState &snap) {
@@ -5291,6 +5393,13 @@ EXPORT int ioctl(int fd, ioctl_request_t op, ...) {
   const char *event = controller->second->event ? controller->second->event : "event0";
   int event_number = controller->second->slot;
   const UinputDescription *made = controller->second->uinput;
+
+  if (controller->second->mouse) {
+    int result = ioctl_mouse(op, argp);
+    if (result >= 0) return result;
+    guard.unlock();
+    return forward_ioctl(fd, op, argp);
+  }
 
   if (type == 0x45 && number == 0x1) {
     Logger::log("Hooking ioctl EVIOCGVERSION for event %s\n", event);
@@ -5556,6 +5665,12 @@ static ssize_t read_input(int fd, void *buf, size_t count) {
         if (fake.needs_keyframe || snap.resync_seq != fake.resync_seq ||
             snap.write_seq < fake.read_seq ||
             snap.write_seq - fake.read_seq > FAKE_INPUT_RING_CAPACITY) {
+          if (fake.mouse) {
+            fake.read_seq = snap.write_seq;
+            fake.resync_seq = snap.resync_seq;
+            fake.needs_keyframe = false;
+            continue;
+          }
           capture_keyframe(fake, snap);
         } else {
           size_t events = std::min<uint64_t>(requested, snap.write_seq - fake.read_seq);

@@ -26,7 +26,7 @@ if [ "$pkg" = "$P" ]; then
   python3 "$here/axml_rename.py" "$in" "$work/renamed.apk"
 else
   python3 "$here/axml_rename.py" "$in" "$work/renamed.apk" \
-    "$P=$pkg" "$P.androidx-startup=$pkg.androidx-startup" "$P.logs=$pkg.logs" \
+    "$P=$pkg" "$P.sdl3bridge=$pkg.sdl3bridge" "$P.androidx-startup=$pkg.androidx-startup" "$P.logs=$pkg.logs" \
     "$P.pairingguide=$pkg.pairingguide" "$P.pin=$pkg.pin" \
     "$P.documents=$pkg.documents" "$P.home=$pkg.home" "$P.agent=$pkg.agent" \
     "$P.vr_recovery=$pkg.vr_recovery" "$P.dualscreen=$pkg.dualscreen" "$P.typing=$pkg.typing" \

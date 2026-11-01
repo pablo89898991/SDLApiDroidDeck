@@ -299,6 +299,8 @@
     <string name="mode_controller_x360">Manette Xbox 360</string>
     <string name="mode_controller_note">Deck : bouton d\'accès rapide et gyroscope. Steam Controller : idem, avec détection de la prise en main sur les boutons arrière. DualShock 4 et DualSense : gyroscope, et les trackpads servent de pavé tactile. Xbox 360 : utilisez Guide+A pour ouvrir l\'accès rapide.</string>
     <string name="mode_back">Retour</string>
+    <string name="back_hold">Maintenir Retour pour les raccourcis Steam</string>
+    <string name="back_hold_hint">Maintenir Retour ouvre l’accès rapide ou crée des combinaisons Steam avec d’autres boutons. Désactivez pour ignorer l’appui long ; l’appui simple et double fonctionnent toujours.</string>
     <string name="back_native_qam_hint">Maintenez Retour pendant 700 ms, ou maintenez Retour et appuyez sur un autre bouton pour les raccourcis Steam.</string>
     <string name="back_double_tap_window">Délai du double appui</string>
     <string name="back_tap_ms">%1$d ms</string>
@@ -656,6 +658,8 @@
     <string name="hud_size_strip">Bandeau</string>
     <string name="hud_locked">Verrouiller la position</string>
     <string name="hud_locked_hint">Faites glisser le HUD pour le déplacer ; un appui long le verrouille ou le déverrouille. Tant qu\'il est verrouillé, les commandes à l\'écran situées dessous restent utilisables.</string>
+    <string name="hud_snap">Aimanter sur les côtés</string>
+    <string name="hud_snap_hint">Relâchez le HUD et il rejoint le côté de l’écran le plus proche. Un geste rapide le lance dans cette direction.</string>
     <string name="hud_group_look">Apparence</string>
     <string name="hud_scale">Taille à l\'écran</string>
     <string name="hud_color_soft">Douce</string>
@@ -2125,6 +2129,7 @@
     <string name="display_look_filter">%1$s Règle la mise à l\'échelle sur %2$s.</string>
     <string name="display_match_screen">Adapter à l\'écran (%1$d×%2$d)</string>
     <string name="display_follow_screen">Suivre l\'écran (s\'adapte au pliage et au dépliage)</string>
+    <string name="display_follow_screen_scaled">Mis à l\'échelle %1$s</string>
     <string name="mode_tab_steam">Steam</string>
     <string name="device_info_show">Afficher les détails de l\'appareil</string>
     <string name="device_info_hide">Masquer les détails de l\'appareil</string>

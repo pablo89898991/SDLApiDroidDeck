@@ -299,6 +299,8 @@
     <string name="mode_controller_x360">Comando Xbox 360</string>
     <string name="mode_controller_note">Deck: botão de Acesso rápido e giroscópio. Steam Controller: o mesmo, com sensor de pega nos botões traseiros. DualShock 4 e DualSense: giroscópio, e os trackpads como o painel tátil do comando. Xbox 360: abra o Acesso rápido com Guide+A.</string>
     <string name="mode_back">Voltar</string>
+    <string name="back_hold">Manter Voltar premido para atalhos do Steam</string>
+    <string name="back_hold_hint">Manter Voltar premido abre o Acesso rápido ou cria combinações do Steam com outros botões. Desative para ignorar Voltar premido; toque e toque duplo continuam a funcionar.</string>
     <string name="back_native_qam_hint">Mantenha Voltar premido durante 700 ms, ou mantenha Voltar premido e prima outro botão para atalhos do Steam.</string>
     <string name="back_double_tap_window">Intervalo do toque duplo</string>
     <string name="back_tap_ms">%1$d ms</string>
@@ -656,6 +658,8 @@
     <string name="hud_size_strip">Barra</string>
     <string name="hud_locked">Bloquear posição</string>
     <string name="hud_locked_hint">Arraste o HUD para o mover; um toque longo bloqueia-o ou desbloqueia-o. Enquanto estiver bloqueado, os controlos no ecrã por baixo dele continuam a funcionar.</string>
+    <string name="hud_snap">Encaixar nas laterais</string>
+    <string name="hud_snap_hint">Solte o HUD e ele vai para a lateral mais próxima do ecrã. Um gesto rápido lança-o nessa direção.</string>
     <string name="hud_group_look">Aspeto</string>
     <string name="hud_scale">Tamanho no ecrã</string>
     <string name="hud_color_soft">Suave</string>
@@ -2117,6 +2121,7 @@
     <string name="display_look_filter">%1$s Define a escala como %2$s.</string>
     <string name="display_match_screen">Igual ao ecrã (%1$d×%2$d)</string>
     <string name="display_follow_screen">Seguir o ecrã (redimensiona ao dobrar ou desdobrar)</string>
+    <string name="display_follow_screen_scaled">Escalado %1$s</string>
     <string name="mode_tab_steam">Steam</string>
     <string name="device_info_show">Mostrar detalhes do dispositivo</string>
     <string name="device_info_hide">Ocultar detalhes do dispositivo</string>

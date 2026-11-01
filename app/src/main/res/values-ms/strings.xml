@@ -299,6 +299,8 @@
     <string name="mode_controller_x360">Pengawal Xbox 360</string>
     <string name="mode_controller_note">Deck: butang Quick Access dan giro. Steam Controller: sama, dengan grip sense pada butang belakang. DualShock 4 dan DualSense: giro, dan trackpad sebagai pad sentuhnya. Xbox 360: buka Quick Access dengan Guide+A.</string>
     <string name="mode_back">Kembali</string>
+    <string name="back_hold">Tahan Kembali untuk pintasan Steam</string>
+    <string name="back_hold_hint">Menahan Kembali membuka Akses Pantas atau membuat kombinasi Steam dengan butang lain. Matikan untuk mengabaikan Kembali yang ditahan; ketik dan ketik dua kali masih berfungsi.</string>
     <string name="back_native_qam_hint">Tahan Kembali selama 700 ms, atau tahan Kembali dan tekan butang lain untuk pintasan Steam.</string>
     <string name="back_double_tap_window">Tempoh ketik dua kali</string>
     <string name="back_tap_ms">%1$d ms</string>
@@ -652,6 +654,8 @@
     <string name="hud_size_strip">Jalur</string>
     <string name="hud_locked">Kunci di tempat</string>
     <string name="hud_locked_hint">Seret HUD untuk mengalihkannya; tekan lama untuk mengunci atau membuka kuncinya. Semasa dikunci, kawalan skrin di bawahnya masih berfungsi.</string>
+    <string name="hud_snap">Lekap ke sisi</string>
+    <string name="hud_snap_hint">Lepaskan HUD dan ia akan beralih ke sisi skrin yang lebih dekat. Kuis pantas melemparkannya ke arah itu.</string>
     <string name="hud_group_look">Rupa</string>
     <string name="hud_scale">Saiz pada skrin</string>
     <string name="hud_color_soft">Lembut</string>
@@ -2079,6 +2083,7 @@
     <string name="display_look_filter">%1$s Menetapkan penskalaan ke %2$s.</string>
     <string name="display_match_screen">Sepadan skrin (%1$d×%2$d)</string>
     <string name="display_follow_screen">Ikut skrin (mengubah saiz apabila dilipat atau dibuka)</string>
+    <string name="display_follow_screen_scaled">Diskalakan %1$s</string>
     <string name="mode_tab_steam">Steam</string>
     <string name="device_info_show">Papar butiran peranti</string>
     <string name="device_info_hide">Sembunyikan butiran peranti</string>

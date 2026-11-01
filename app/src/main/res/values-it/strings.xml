@@ -299,6 +299,8 @@
     <string name="mode_controller_x360">Controller Xbox 360</string>
     <string name="mode_controller_note">Deck: tasto Accesso rapido e giroscopio. Steam Controller: lo stesso, con il rilevamento della presa sui tasti posteriori. DualShock 4 e DualSense: giroscopio, con i trackpad usati come touchpad. Xbox 360: apri Accesso rapido con Guide+A.</string>
     <string name="mode_back">Indietro</string>
+    <string name="back_hold">Tieni premuto Indietro per le scorciatoie Steam</string>
+    <string name="back_hold_hint">Tenere premuto Indietro apre l’Accesso rapido o crea combinazioni Steam con altri tasti. Disattiva per ignorare la pressione prolungata; tocco e doppio tocco funzionano ancora.</string>
     <string name="back_native_qam_hint">Tieni premuto Indietro per 700 ms, oppure tieni premuto Indietro e premi un altro tasto per le scorciatoie di Steam.</string>
     <string name="back_double_tap_window">Intervallo doppio tocco</string>
     <string name="back_tap_ms">%1$d ms</string>
@@ -656,6 +658,8 @@
     <string name="hud_size_strip">Barra</string>
     <string name="hud_locked">Blocca in posizione</string>
     <string name="hud_locked_hint">Trascina l\'HUD per spostarlo; una pressione prolungata lo blocca o lo sblocca. Mentre è bloccato, i controlli su schermo sotto di esso continuano a funzionare.</string>
+    <string name="hud_snap">Aggancia ai lati</string>
+    <string name="hud_snap_hint">Rilascia l\'HUD e si sposta sul lato più vicino dello schermo. Un gesto rapido lo lancia in quella direzione.</string>
     <string name="hud_group_look">Aspetto</string>
     <string name="hud_scale">Dimensione sullo schermo</string>
     <string name="hud_color_soft">Tenue</string>
@@ -2117,6 +2121,7 @@
     <string name="display_look_filter">%1$s Imposta il ridimensionamento su %2$s.</string>
     <string name="display_match_screen">Adatta allo schermo (%1$d×%2$d)</string>
     <string name="display_follow_screen">Segui lo schermo (si ridimensiona quando lo pieghi o lo apri)</string>
+    <string name="display_follow_screen_scaled">Scalato %1$s</string>
     <string name="mode_tab_steam">Steam</string>
     <string name="device_info_show">Mostra dettagli dispositivo</string>
     <string name="device_info_hide">Nascondi dettagli dispositivo</string>

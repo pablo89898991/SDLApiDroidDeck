@@ -299,6 +299,8 @@
     <string name="mode_controller_x360">Xbox 360 कंट्रोलर</string>
     <string name="mode_controller_note">Deck: Quick Access बटन और gyro। Steam Controller: वही, साथ में पीछे के बटन पर ग्रिप सेंस। DualShock 4 और DualSense: gyro, और ट्रैकपैड उनके टचपैड के तौर पर। Xbox 360: Guide+A से Quick Access खोलें।</string>
     <string name="mode_back">बैक</string>
+    <string name="back_hold">Steam शॉर्टकट के लिए बैक दबाकर रखें</string>
+    <string name="back_hold_hint">बैक दबाकर रखने से क्विक एक्सेस खुलता है या दूसरे बटनों के साथ Steam कॉम्बो बनते हैं। दबाकर रखने को अनदेखा करने के लिए बंद करें; टैप और डबल-टैप काम करते रहेंगे।</string>
     <string name="back_native_qam_hint">Steam शॉर्टकट के लिए Back को 700 ms तक दबाए रखें, या Back दबाए रखकर कोई दूसरा बटन दबाएं।</string>
     <string name="back_double_tap_window">डबल-टैप विंडो</string>
     <string name="back_tap_ms">%1$d ms</string>
@@ -654,6 +656,8 @@
     <string name="hud_size_strip">पट्टी</string>
     <string name="hud_locked">जगह पर लॉक करें</string>
     <string name="hud_locked_hint">HUD को खिसकाने के लिए उसे ड्रैग करें; देर तक दबाने से वह लॉक या अनलॉक होता है। लॉक रहने पर भी उसके नीचे के ऑन-स्क्रीन कंट्रोल काम करते रहते हैं।</string>
+    <string name="hud_snap">किनारों पर चिपकाएँ</string>
+    <string name="hud_snap_hint">HUD छोड़ने पर यह स्क्रीन की पास वाली ओर चला जाता है। तेज़ी से झटकने पर यह उसी दिशा में जाता है।</string>
     <string name="hud_group_look">लुक</string>
     <string name="hud_scale">स्क्रीन पर आकार</string>
     <string name="hud_color_soft">हल्का</string>
@@ -2102,6 +2106,7 @@
     <string name="display_look_filter">%1$s स्केलिंग को %2$s पर सेट करता है।</string>
     <string name="display_match_screen">स्क्रीन से मिलाएँ (%1$d×%2$d)</string>
     <string name="display_follow_screen">Follow screen (खुलने या बंद होने पर आकार बदलता है)</string>
+    <string name="display_follow_screen_scaled">स्केल %1$s</string>
     <string name="mode_tab_steam">Steam</string>
     <string name="device_info_show">डिवाइस जानकारी दिखाएं</string>
     <string name="device_info_hide">डिवाइस जानकारी छिपाएं</string>

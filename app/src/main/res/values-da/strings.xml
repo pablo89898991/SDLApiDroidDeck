@@ -299,6 +299,8 @@
     <string name="mode_controller_x360">Xbox 360-controller</string>
     <string name="mode_controller_note">Deck: Hurtig adgang-knap og gyro. Steam Controller: det samme, med gribefølsomme bagknapper. DualShock 4 og DualSense: gyro, og touchpaddene som deres touchpad. Xbox 360: åbn Hurtig adgang med Guide+A.</string>
     <string name="mode_back">Tilbage</string>
+    <string name="back_hold">Hold Tilbage for Steam-genveje</string>
+    <string name="back_hold_hint">Hold Tilbage for at åbne Hurtig adgang eller lave Steam-kombinationer med andre knapper. Slå fra for at ignorere holdt Tilbage; tryk og dobbelttryk virker stadig.</string>
     <string name="back_native_qam_hint">Hold Tilbage i 700 ms, eller hold Tilbage og tryk på en anden knap for Steam-genveje.</string>
     <string name="back_double_tap_window">Tidsrum for dobbelttryk</string>
     <string name="back_tap_ms">%1$d ms</string>
@@ -654,6 +656,8 @@
     <string name="hud_size_strip">Bjælke</string>
     <string name="hud_locked">Lås fast</string>
     <string name="hud_locked_hint">Træk i HUD for at flytte det; et langt tryk låser eller frigør det. Mens det er låst, virker skærmknapperne under det stadig.</string>
+    <string name="hud_snap">Fastgør til siderne</string>
+    <string name="hud_snap_hint">Slip HUD\'en, så flytter den sig til skærmens nærmeste side. Et hurtigt stryg kaster den i den retning.</string>
     <string name="hud_group_look">Udseende</string>
     <string name="hud_scale">Størrelse på skærmen</string>
     <string name="hud_color_soft">Blød</string>
@@ -2102,6 +2106,7 @@
     <string name="display_look_filter">%1$s Indstiller skalering til %2$s.</string>
     <string name="display_match_screen">Match skærm (%1$d×%2$d)</string>
     <string name="display_follow_screen">Følg skærm (ændrer størrelse ved fold/udfold)</string>
+    <string name="display_follow_screen_scaled">Skaleret %1$s</string>
     <string name="mode_tab_steam">Steam</string>
     <string name="device_info_show">Vis enhedsoplysninger</string>
     <string name="device_info_hide">Skjul enhedsoplysninger</string>

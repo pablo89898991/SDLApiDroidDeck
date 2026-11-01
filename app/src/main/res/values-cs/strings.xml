@@ -299,6 +299,8 @@
     <string name="mode_controller_x360">Ovladač Xbox 360</string>
     <string name="mode_controller_note">Deck: tlačítko Quick Access a gyroskop. Steam Controller: totéž, navíc snímání úchopu na zadních tlačítkách. DualShock 4 a DualSense: gyroskop, trackpad slouží jako touchpad. Xbox 360: Quick Access otevřete kombinací Guide+A.</string>
     <string name="mode_back">Zpět</string>
+    <string name="back_hold">Podržení Zpět pro zkratky Steam</string>
+    <string name="back_hold_hint">Podržení Zpět otevře Rychlý přístup nebo vytváří kombinace Steam s dalšími tlačítky. Vypnutím se podržení Zpět ignoruje; klepnutí a dvojité klepnutí fungují dál.</string>
     <string name="back_native_qam_hint">Podržte Zpět 700 ms, nebo podržte Zpět a stiskněte jiné tlačítko pro zkratky Steamu.</string>
     <string name="back_double_tap_window">Interval dvojitého klepnutí</string>
     <string name="back_tap_ms">%1$d ms</string>
@@ -658,6 +660,8 @@
     <string name="hud_size_strip">Lišta</string>
     <string name="hud_locked">Zamknout na místě</string>
     <string name="hud_locked_hint">Přetažením HUD přesunete; dlouhým stiskem ho zamknete nebo odemknete. Když je zamknutý, ovládací prvky na obrazovce pod ním dál fungují.</string>
+    <string name="hud_snap">Přichytit ke stranám</string>
+    <string name="hud_snap_hint">Pusťte HUD a přesune se k bližší straně obrazovky. Rychlým švihnutím ho hodíte tím směrem.</string>
     <string name="hud_group_look">Vzhled</string>
     <string name="hud_scale">Velikost na obrazovce</string>
     <string name="hud_color_soft">Jemná</string>
@@ -2148,6 +2152,7 @@
     <string name="display_look_filter">%1$s Nastaví škálování na %2$s.</string>
     <string name="display_match_screen">Podle obrazovky (%1$d×%2$d)</string>
     <string name="display_follow_screen">Sledovat obrazovku (změní velikost při složení nebo rozložení)</string>
+    <string name="display_follow_screen_scaled">Zmenšeno %1$s</string>
     <string name="mode_tab_steam">Steam</string>
     <string name="device_info_show">Zobrazit podrobnosti o zařízení</string>
     <string name="device_info_hide">Skrýt podrobnosti o zařízení</string>

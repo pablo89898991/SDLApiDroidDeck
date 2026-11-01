@@ -299,6 +299,8 @@
     <string name="mode_controller_x360">Xbox 360-kontroll</string>
     <string name="mode_controller_note">Deck: snabbåtkomstknappen och gyro. Steam Controller: samma, med greppkänsla på bakknapparna. DualShock 4 och DualSense: gyro, och styrplattorna som deras pekplatta. Xbox 360: öppna snabbåtkomst med Guide+A.</string>
     <string name="mode_back">Back</string>
+    <string name="back_hold">Håll Bakåt för Steam-genvägar</string>
+    <string name="back_hold_hint">Håll Bakåt för att öppna Snabbåtkomst eller göra Steam-kombinationer med andra knappar. Stäng av för att ignorera hållen Bakåt; tryck och dubbeltryck fungerar fortfarande.</string>
     <string name="back_native_qam_hint">Håll Back i 700 ms, eller håll Back och tryck på en annan knapp för Steam-genvägar.</string>
     <string name="back_double_tap_window">Tidsfönster för dubbeltryck</string>
     <string name="back_tap_ms">%1$d ms</string>
@@ -654,6 +656,8 @@
     <string name="hud_size_strip">List</string>
     <string name="hud_locked">Lås på plats</string>
     <string name="hud_locked_hint">Dra HUD:en för att flytta den; ett långt tryck låser eller låser upp den. När den är låst fungerar skärmkontrollerna under den fortfarande.</string>
+    <string name="hud_snap">Fäst mot sidorna</string>
+    <string name="hud_snap_hint">Släpp HUD:en så flyttas den till skärmens närmaste sida. En snabb svepning kastar den åt det hållet.</string>
     <string name="hud_group_look">Utseende</string>
     <string name="hud_scale">Storlek på skärmen</string>
     <string name="hud_color_soft">Mjuk</string>
@@ -2102,6 +2106,7 @@
     <string name="display_look_filter">%1$s Ställer in skalning till %2$s.</string>
     <string name="display_match_screen">Matcha skärmen (%1$d×%2$d)</string>
     <string name="display_follow_screen">Följ skärmen (ändrar storlek vid vikning)</string>
+    <string name="display_follow_screen_scaled">Skalad %1$s</string>
     <string name="mode_tab_steam">Steam</string>
     <string name="device_info_show">Visa enhetsinformation</string>
     <string name="device_info_hide">Dölj enhetsinformation</string>

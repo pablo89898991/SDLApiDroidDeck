@@ -299,6 +299,8 @@
     <string name="mode_controller_x360">Χειριστήριο Xbox 360</string>
     <string name="mode_controller_note">Deck: κουμπί Quick Access και γυροσκόπιο. Steam Controller: το ίδιο, με αίσθηση λαβής στα πίσω κουμπιά. DualShock 4 και DualSense: γυροσκόπιο, και τα trackpad ως πινακίδα αφής τους. Xbox 360: ανοίξτε το Quick Access με Guide+A.</string>
     <string name="mode_back">Πίσω</string>
+    <string name="back_hold">Παρατεταμένο Πίσω για συντομεύσεις Steam</string>
+    <string name="back_hold_hint">Το παρατεταμένο Πίσω ανοίγει τη Γρήγορη πρόσβαση ή κάνει συνδυασμούς Steam με άλλα κουμπιά. Απενεργοποιήστε για να αγνοείται· το πάτημα και το διπλό πάτημα λειτουργούν.</string>
     <string name="back_native_qam_hint">Κρατήστε πατημένο το Πίσω για 700 ms ή κρατήστε το Πίσω και πατήστε άλλο κουμπί για συντομεύσεις Steam.</string>
     <string name="back_double_tap_window">Διάστημα διπλού πατήματος</string>
     <string name="back_tap_ms">%1$d ms</string>
@@ -654,6 +656,8 @@
     <string name="hud_size_strip">Λωρίδα</string>
     <string name="hud_locked">Κλείδωμα θέσης</string>
     <string name="hud_locked_hint">Σύρετε το HUD για να το μετακινήσετε· ένα παρατεταμένο πάτημα το κλειδώνει ή το ξεκλειδώνει. Όσο είναι κλειδωμένο, τα χειριστήρια οθόνης από κάτω του εξακολουθούν να λειτουργούν.</string>
+    <string name="hud_snap">Προσκόλληση στα πλάγια</string>
+    <string name="hud_snap_hint">Αφήστε το HUD και μετακινείται στην πιο κοντινή πλευρά της οθόνης. Μια γρήγορη κίνηση το πετάει προς εκείνη την κατεύθυνση.</string>
     <string name="hud_group_look">Εμφάνιση</string>
     <string name="hud_scale">Μέγεθος στην οθόνη</string>
     <string name="hud_color_soft">Απαλό</string>
@@ -2102,6 +2106,7 @@
     <string name="display_look_filter">%1$s Ορίζει την κλιμάκωση σε %2$s.</string>
     <string name="display_match_screen">Αντιστοίχιση οθόνης (%1$d×%2$d)</string>
     <string name="display_follow_screen">Ακολούθηση οθόνης (αλλάζει μέγεθος όταν διπλώνει ή ξεδιπλώνει)</string>
+    <string name="display_follow_screen_scaled">Κλιμάκωση %1$s</string>
     <string name="mode_tab_steam">Steam</string>
     <string name="device_info_show">Εμφάνιση στοιχείων συσκευής</string>
     <string name="device_info_hide">Απόκρυψη στοιχείων συσκευής</string>

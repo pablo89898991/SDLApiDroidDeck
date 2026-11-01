@@ -299,6 +299,8 @@
     <string name="mode_controller_x360">Xbox 360 -ohjain</string>
     <string name="mode_controller_note">Deck: pikavalikkopainike ja gyroskooppi. Steam Controller: samat, ja takapainikkeissa puristustunnistus. DualShock 4 ja DualSense: gyroskooppi, ja kosketuslevyt toimivat kosketuslevynä. Xbox 360: avaa pikavalikko Guide+A:lla.</string>
     <string name="mode_back">Back</string>
+    <string name="back_hold">Pidä Takaisin pohjassa Steam-pikanäppäimille</string>
+    <string name="back_hold_hint">Takaisin pohjassa pitäminen avaa pikavalikon tai tekee Steam-yhdistelmiä muiden painikkeiden kanssa. Poista käytöstä ohittaaksesi pitkän painalluksen; napautus ja kaksoisnapautus toimivat yhä.</string>
     <string name="back_native_qam_hint">Pidä Back-painiketta 700 ms, tai pidä Back-painiketta ja paina toista painiketta Steam-pikanäppäimiä varten.</string>
     <string name="back_double_tap_window">Kaksoisnapautuksen aikaikkuna</string>
     <string name="back_tap_ms">%1$d ms</string>
@@ -654,6 +656,8 @@
     <string name="hud_size_strip">Palkki</string>
     <string name="hud_locked">Lukitse paikalleen</string>
     <string name="hud_locked_hint">Siirrä HUD:ia vetämällä; pitkä painallus lukitsee tai vapauttaa sen. Lukittuna sen alla olevat näytön ohjaimet toimivat edelleen.</string>
+    <string name="hud_snap">Kiinnitä sivuille</string>
+    <string name="hud_snap_hint">Kun päästät HUDista irti, se siirtyy näytön lähempään reunaan. Nopea pyyhkäisy heittää sen siihen suuntaan.</string>
     <string name="hud_group_look">Ulkoasu</string>
     <string name="hud_scale">Koko näytöllä</string>
     <string name="hud_color_soft">Pehmeä</string>
@@ -2102,6 +2106,7 @@
     <string name="display_look_filter">%1$s Asettaa skaalauksen tilaan %2$s.</string>
     <string name="display_match_screen">Sovita näyttöön (%1$d×%2$d)</string>
     <string name="display_follow_screen">Seuraa näyttöä (koko muuttuu taitettuna tai avattuna)</string>
+    <string name="display_follow_screen_scaled">Skaalattu %1$s</string>
     <string name="mode_tab_steam">Steam</string>
     <string name="device_info_show">Näytä laitteen tiedot</string>
     <string name="device_info_hide">Piilota laitteen tiedot</string>

@@ -299,6 +299,8 @@
     <string name="mode_controller_x360">Controller Xbox 360</string>
     <string name="mode_controller_note">Deck: butonul Acces rapid și giroscopul. Steam Controller: la fel, cu senzori de strângere pe butoanele din spate. DualShock 4 și DualSense: giroscop, și trackpadurile ca touchpad propriu. Xbox 360: deschide Acces rapid cu Guide+A.</string>
     <string name="mode_back">Înapoi</string>
+    <string name="back_hold">Ține apăsat Înapoi pentru comenzi Steam</string>
+    <string name="back_hold_hint">Dacă ții apăsat Înapoi se deschide Acces rapid sau se fac combinații Steam cu alte butoane. Dezactivează pentru a ignora apăsarea lungă; atingerea și dubla atingere funcționează în continuare.</string>
     <string name="back_native_qam_hint">Ține apăsat Înapoi 700 ms sau ține apăsat Înapoi și apasă alt buton pentru comenzile rapide Steam.</string>
     <string name="back_double_tap_window">Interval pentru atingere dublă</string>
     <string name="back_tap_ms">%1$d ms</string>
@@ -656,6 +658,8 @@
     <string name="hud_size_strip">Bară</string>
     <string name="hud_locked">Blochează pe loc</string>
     <string name="hud_locked_hint">Trage HUD-ul pentru a-l muta; o apăsare lungă îl blochează sau îl deblochează. Cât timp e blocat, comenzile de pe ecran de sub el funcționează în continuare.</string>
+    <string name="hud_snap">Fixare în lateral</string>
+    <string name="hud_snap_hint">Eliberează HUD-ul și se mută în partea mai apropiată a ecranului. Un gest rapid îl aruncă în acea direcție.</string>
     <string name="hud_group_look">Aspect</string>
     <string name="hud_scale">Dimensiune pe ecran</string>
     <string name="hud_color_soft">Discretă</string>
@@ -2125,6 +2129,7 @@
     <string name="display_look_filter">%1$s Setează scalarea la %2$s.</string>
     <string name="display_match_screen">Potrivire ecran (%1$d×%2$d)</string>
     <string name="display_follow_screen">Urmărește ecranul (se redimensionează la împăturire sau desfacere)</string>
+    <string name="display_follow_screen_scaled">Scalat %1$s</string>
     <string name="mode_tab_steam">Steam</string>
     <string name="device_info_show">Arată detaliile dispozitivului</string>
     <string name="device_info_hide">Ascunde detaliile dispozitivului</string>

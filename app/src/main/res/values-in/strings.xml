@@ -299,6 +299,8 @@
     <string name="mode_controller_x360">Pengontrol Xbox 360</string>
     <string name="mode_controller_note">Deck: tombol Quick Access dan giroskop. Steam Controller: sama, dengan grip sense pada tombol belakang. DualShock 4 dan DualSense: giroskop, dan trackpad sebagai touchpad-nya. Xbox 360: buka Quick Access dengan Guide+A.</string>
     <string name="mode_back">Kembali</string>
+    <string name="back_hold">Tahan Kembali untuk pintasan Steam</string>
+    <string name="back_hold_hint">Menahan Kembali membuka Akses Cepat atau membuat kombinasi Steam dengan tombol lain. Matikan untuk mengabaikan Kembali yang ditahan; ketuk dan ketuk dua kali tetap berfungsi.</string>
     <string name="back_native_qam_hint">Tahan Back selama 700 ms, atau tahan Back dan tekan tombol lain untuk pintasan Steam.</string>
     <string name="back_double_tap_window">Jeda ketuk dua kali</string>
     <string name="back_tap_ms">%1$d ms</string>
@@ -652,6 +654,8 @@
     <string name="hud_size_strip">Bilah</string>
     <string name="hud_locked">Kunci posisi</string>
     <string name="hud_locked_hint">Seret HUD untuk memindahkannya; tekan lama untuk mengunci atau membuka kuncinya. Saat terkunci, kontrol layar di bawahnya tetap berfungsi.</string>
+    <string name="hud_snap">Tempel ke sisi</string>
+    <string name="hud_snap_hint">Lepaskan HUD dan HUD akan pindah ke sisi layar yang lebih dekat. Jentikan cepat melemparnya ke arah itu.</string>
     <string name="hud_group_look">Tampilan</string>
     <string name="hud_scale">Ukuran di layar</string>
     <string name="hud_color_soft">Lembut</string>
@@ -2079,6 +2083,7 @@
     <string name="display_look_filter">%1$s Mengatur skala ke %2$s.</string>
     <string name="display_match_screen">Sesuaikan layar (%1$d×%2$d)</string>
     <string name="display_follow_screen">Ikuti layar (ukuran berubah saat dilipat atau dibuka)</string>
+    <string name="display_follow_screen_scaled">Diskalakan %1$s</string>
     <string name="mode_tab_steam">Steam</string>
     <string name="device_info_show">Tampilkan detail perangkat</string>
     <string name="device_info_hide">Sembunyikan detail perangkat</string>

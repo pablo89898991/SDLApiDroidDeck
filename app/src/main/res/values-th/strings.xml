@@ -299,6 +299,8 @@
     <string name="mode_controller_x360">คอนโทรลเลอร์ Xbox 360</string>
     <string name="mode_controller_note">Deck: ปุ่ม Quick Access และไจโร Steam Controller: เหมือนกัน พร้อมเซนเซอร์แรงจับที่ปุ่มด้านหลัง DualShock 4 และ DualSense: ไจโร และแทร็กแพดทำหน้าที่เป็นทัชแพด Xbox 360: เปิด Quick Access ด้วย Guide+A</string>
     <string name="mode_back">กลับ</string>
+    <string name="back_hold">กดค้างย้อนกลับสำหรับทางลัด Steam</string>
+    <string name="back_hold_hint">กดค้างย้อนกลับเพื่อเปิดการเข้าถึงด่วนหรือใช้คอมโบ Steam กับปุ่มอื่น ปิดเพื่อไม่สนใจการกดค้าง การแตะและแตะสองครั้งยังใช้ได้</string>
     <string name="back_native_qam_hint">กดปุ่ม Back ค้างไว้ 700 ms หรือกด Back ค้างแล้วกดปุ่มอื่นเพื่อใช้ทางลัดของ Steam</string>
     <string name="back_double_tap_window">ช่วงเวลาแตะสองครั้ง</string>
     <string name="back_tap_ms">%1$d ms</string>
@@ -652,6 +654,8 @@
     <string name="hud_size_strip">แถบ</string>
     <string name="hud_locked">ล็อกตำแหน่ง</string>
     <string name="hud_locked_hint">ลาก HUD เพื่อย้าย กดค้างเพื่อล็อกหรือปลดล็อก ขณะล็อก ปุ่มควบคุมบนหน้าจอที่อยู่ด้านล่างยังใช้งานได้</string>
+    <string name="hud_snap">ยึดติดด้านข้าง</string>
+    <string name="hud_snap_hint">ปล่อย HUD แล้วจะย้ายไปด้านที่ใกล้กว่าของหน้าจอ ปัดเร็วๆ เพื่อเหวี่ยงไปทางนั้น</string>
     <string name="hud_group_look">รูปลักษณ์</string>
     <string name="hud_scale">ขนาดบนหน้าจอ</string>
     <string name="hud_color_soft">อ่อน</string>
@@ -2079,6 +2083,7 @@
     <string name="display_look_filter">%1$s ตั้งการปรับขนาดเป็น %2$s</string>
     <string name="display_match_screen">พอดีหน้าจอ (%1$d×%2$d)</string>
     <string name="display_follow_screen">ตามหน้าจอ (ปรับขนาดเมื่อพับหรือกาง)</string>
+    <string name="display_follow_screen_scaled">ปรับสเกล %1$s</string>
     <string name="mode_tab_steam">Steam</string>
     <string name="device_info_show">แสดงรายละเอียดอุปกรณ์</string>
     <string name="device_info_hide">ซ่อนรายละเอียดอุปกรณ์</string>

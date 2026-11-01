@@ -299,6 +299,8 @@
     <string name="mode_controller_x360">Xbox 360-controller</string>
     <string name="mode_controller_note">Deck: knop Snelle toegang en gyro. Steam Controller: hetzelfde, met gripsensor op de achterknoppen. DualShock 4 en DualSense: gyro, en de trackpads als hun touchpad. Xbox 360: open Snelle toegang met Guide+A.</string>
     <string name="mode_back">Terug</string>
+    <string name="back_hold">Terug ingedrukt houden voor Steam-sneltoetsen</string>
+    <string name="back_hold_hint">Terug ingedrukt houden opent Snelle toegang of maakt Steam-combinaties met andere knoppen. Zet uit om ingedrukt houden te negeren; tikken en dubbeltikken blijven werken.</string>
     <string name="back_native_qam_hint">Houd Terug 700 ms ingedrukt, of houd Terug ingedrukt en druk op een andere knop voor Steam-sneltoetsen.</string>
     <string name="back_double_tap_window">Tijdvenster voor dubbeltikken</string>
     <string name="back_tap_ms">%1$d ms</string>
@@ -654,6 +656,8 @@
     <string name="hud_size_strip">Balk</string>
     <string name="hud_locked">Vastzetten</string>
     <string name="hud_locked_hint">Sleep de HUD om hem te verplaatsen; lang drukken zet hem vast of los. Zolang hij vastzit, blijven de schermknoppen eronder werken.</string>
+    <string name="hud_snap">Vastklikken aan zijkanten</string>
+    <string name="hud_snap_hint">Laat de HUD los en hij gaat naar de dichtstbijzijnde kant van het scherm. Met een snelle veeg gooi je hem die kant op.</string>
     <string name="hud_group_look">Weergave</string>
     <string name="hud_scale">Grootte op scherm</string>
     <string name="hud_color_soft">Zacht</string>
@@ -2102,6 +2106,7 @@
     <string name="display_look_filter">%1$s Zet schaling op %2$s.</string>
     <string name="display_match_screen">Schermformaat (%1$d×%2$d)</string>
     <string name="display_follow_screen">Scherm volgen (past formaat aan bij vouwen of uitvouwen)</string>
+    <string name="display_follow_screen_scaled">Geschaald %1$s</string>
     <string name="mode_tab_steam">Steam</string>
     <string name="device_info_show">Apparaatgegevens tonen</string>
     <string name="device_info_hide">Apparaatgegevens verbergen</string>

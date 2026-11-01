@@ -298,6 +298,8 @@
     <string name="mode_controller_x360">Xbox 360 手柄</string>
     <string name="mode_controller_note">Deck：快捷访问按钮与陀螺仪。Xbox 360：用 Guide+A 打开快捷访问。</string>
     <string name="mode_back">返回</string>
+    <string name="back_hold">长按返回键使用 Steam 快捷操作</string>
+    <string name="back_hold_hint">长按返回键打开快速访问，或与其他按键组成 Steam 组合键。关闭后忽略长按；单击和双击仍然有效。</string>
     <string name="back_native_qam_hint">按住返回键 700 毫秒，或按住返回键再按另一个按钮以使用 Steam 快捷键。</string>
     <string name="back_double_tap_window">双击间隔</string>
     <string name="back_tap_ms">%1$d 毫秒</string>
@@ -641,6 +643,8 @@
     <string name="hud_size_strip">横条</string>
     <string name="hud_locked">锁定位置</string>
     <string name="hud_locked_hint">拖动 HUD 可移动位置；长按可锁定或解锁。锁定时，下方的屏幕控件仍可使用。</string>
+    <string name="hud_snap">吸附到两侧</string>
+    <string name="hud_snap_hint">松开 HUD 后，它会移到屏幕较近的一侧。轻甩可将它甩向该方向。</string>
     <string name="hud_group_look">外观</string>
     <string name="hud_scale">屏幕显示大小</string>
     <string name="hud_color_soft">柔和</string>
@@ -2127,6 +2131,7 @@
     <string name="display_look_filter">%1$s 将缩放设为 %2$s。</string>
     <string name="display_match_screen">匹配屏幕（%1$d×%2$d）</string>
     <string name="display_follow_screen">跟随屏幕（折叠或展开时调整大小）</string>
+    <string name="display_follow_screen_scaled">缩放 %1$s</string>
     <string name="mode_tab_steam">Steam</string>
     <string name="device_info_show">显示设备详情</string>
     <string name="device_info_hide">隐藏设备详情</string>

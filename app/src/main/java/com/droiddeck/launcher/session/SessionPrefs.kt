@@ -100,6 +100,38 @@ object SessionPrefs {
         prefs(context).edit().putString("secondScreenPanel", mode).apply()
     }
 
+    fun statsStrip(context: Context): String? = prefs(context).getString("statsStrip", null)
+
+    fun setStatsStrip(context: Context, id: String) {
+        prefs(context).edit().putString("statsStrip", id).apply()
+    }
+
+    fun statsSpeedUnit(context: Context): String? = prefs(context).getString("statsSpeedUnit", null)
+
+    fun setStatsSpeedUnit(context: Context, id: String) {
+        prefs(context).edit().putString("statsSpeedUnit", id).apply()
+    }
+
+    fun statsDash(context: Context): String? = prefs(context).getString("statsDash", null)
+
+    fun setStatsDash(context: Context, id: String) {
+        prefs(context).edit().putString("statsDash", id).apply()
+    }
+
+    /** In-game stats "Send dashboard data" Automatic: on unless the user switched it off. */
+    fun telemetryAuto(context: Context): Boolean = prefs(context).getBoolean("telemetryAuto", true)
+
+    fun setTelemetryAuto(context: Context, on: Boolean) {
+        prefs(context).edit().putBoolean("telemetryAuto", on).apply()
+    }
+
+    /** Games the user switched off by hand, as TelemetryOutput keys; Automatic leaves them alone. */
+    fun telemetryOff(context: Context): Set<String> = prefs(context).getStringSet("telemetryOff", null)?.toSet().orEmpty()
+
+    fun setTelemetryOff(context: Context, keys: Set<String>) {
+        prefs(context).edit().putStringSet("telemetryOff", keys.toSet()).apply()
+    }
+
     fun dualScreenLauncher(context: Context): Boolean = prefs(context).getBoolean("dualScreenLauncher", true)
 
     fun setDualScreenLauncher(context: Context, on: Boolean) {
@@ -147,10 +179,10 @@ object SessionPrefs {
     }
 
     fun storesView(context: Context): String =
-        prefs(context).getString("storesView", null)?.takeIf { it in STORES_VIEWS } ?: STORES_VIEWS.first()
+        prefs(context).getString("storesView", null)?.takeIf { it in STORES_VIEWS } ?: DEFAULT_STORES_VIEW
 
     fun setStoresView(context: Context, view: String) {
-        prefs(context).edit().putString("storesView", if (view in STORES_VIEWS) view else STORES_VIEWS.first()).apply()
+        prefs(context).edit().putString("storesView", if (view in STORES_VIEWS) view else DEFAULT_STORES_VIEW).apply()
     }
 
     fun libraryCardLevel(context: Context): Int = prefs(context).getInt("libraryCardLevel", 2)
@@ -199,6 +231,7 @@ object SessionPrefs {
 
     val STORES_SORTS = listOf("lastPlayed", "recentlyInstalled", "titleAsc", "titleDesc", "sizeDesc", "sizeAsc", "releaseDateDesc")
     val STORES_VIEWS = listOf("cards", "capsules", "list")
+    const val DEFAULT_STORES_VIEW = "capsules"
 
     fun storesInstallTarget(context: Context): String = prefs(context).getString("storesInstallTarget", "") ?: ""
 
@@ -285,18 +318,18 @@ object SessionPrefs {
         prefs(context).edit().putInt("hudOpacity", percent.coerceIn(HUD_OPACITY_RANGE)).apply()
     }
 
-    fun fusionHudConfig(context: Context): String? = prefs(context).getString("fusionHud", null)
+    fun droidDeckHudConfig(context: Context): String? = prefs(context).getString("__KEEP_droidDeckHud__", null)
 
-    fun setFusionHudConfig(context: Context, config: String) {
-        prefs(context).edit().putString("fusionHud", config).apply()
+    fun setDroidDeckHudConfig(context: Context, config: String) {
+        prefs(context).edit().putString("__KEEP_droidDeckHud__", config).apply()
     }
 
-    fun fusionHudPosition(context: Context): Pair<Float, Float>? =
-        prefs(context).getString("fusionHudPos", null)?.split(',')?.mapNotNull { it.toFloatOrNull() }
+    fun droidDeckHudPosition(context: Context): Pair<Float, Float>? =
+        prefs(context).getString("__KEEP_droidDeckHudPos__", null)?.split(',')?.mapNotNull { it.toFloatOrNull() }
             ?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
 
-    fun setFusionHudPosition(context: Context, x: Float, y: Float) {
-        prefs(context).edit().putString("fusionHudPos", "$x,$y").apply()
+    fun setDroidDeckHudPosition(context: Context, x: Float, y: Float) {
+        prefs(context).edit().putString("__KEEP_droidDeckHudPos__", "$x,$y").apply()
     }
 
     const val HUD_COLOR_MINT = "mint"
@@ -441,11 +474,15 @@ object SessionPrefs {
 
     /**
      * Shader pre-caching as the launcher last set it, until a session reports it written into the
-     * client's config.vdf; after that the client's own toggle is the user's again.
+     * client's config.vdf; after that the client's own toggle is the user's again. A client that
+     * has never written a config.vdf starts with pre-caching off.
      */
     fun pendingShaderPrecache(context: Context): Boolean? {
         val prefs = prefs(context)
-        if (!prefs.contains("shaderPrecache")) return null
+        if (!prefs.contains("shaderPrecache")) {
+            if (steamConfig(context).exists()) return null
+            prefs.edit().putBoolean("shaderPrecache", false).apply()
+        }
         val on = prefs.getBoolean("shaderPrecache", true)
         val applied = shaderPrecacheApplied(context)
         val written = runCatching { applied.readText().trim() }.getOrNull() ?: return on
@@ -460,9 +497,12 @@ object SessionPrefs {
         prefs(context).edit().putBoolean("shaderPrecache", on).apply()
     }
 
+    private fun steamConfig(context: Context) =
+        java.io.File(steamRoot(context, steamClientArch(context)), "config/config.vdf")
+
     fun shaderPrecache(context: Context): Boolean = pendingShaderPrecache(context)
         ?: runCatching { com.droiddeck.launcher.storage.SteamStorage.shaderPrecache(
-            java.io.File(steamRoot(context, steamClientArch(context)), "config/config.vdf").readText()) }.getOrDefault(true)
+            steamConfig(context).readText()) }.getOrDefault(true)
 
     fun stretch16x9(context: Context): Boolean = prefs(context).getBoolean("stretch16x9", false)
 
@@ -1019,19 +1059,32 @@ object SessionPrefs {
         if (previous != null && !p.contains("addedAppId:$folderPath")) {
             val moved = movedAddedGame(p.all, previous, folderPath)
             moved.keys.forEach { edit.remove(it) }
-            moved.values.forEach { (name, value) ->
-                when (value) {
-                    is String -> edit.putString(name, value)
-                    is Long -> edit.putLong(name, value)
-                    is Int -> edit.putInt(name, value)
-                    is Boolean -> edit.putBoolean(name, value)
-                    is Float -> edit.putFloat(name, value)
-                }
-            }
+            moved.values.forEach { (name, value) -> edit.putValue(name, value) }
             val removed = removedAddedGames(context)
             if (previous in removed) edit.putString("removedAddedGames", removed.map { if (it == previous) folderPath else it }.joinToString("\n"))
         }
         edit.apply()
+    }
+
+    fun inheritAddedGame(context: Context, from: String, to: String) = synchronized(addedGameLock) {
+        val p = prefs(context)
+        val all = p.all
+        val edit = p.edit()
+        all.filterKeys { it.startsWith("added") && it.endsWith(":$from") }.forEach { (name, value) ->
+            val key = name.removeSuffix(from) + to
+            if (key !in all) edit.putValue(key, value)
+        }
+        edit.apply()
+    }
+
+    private fun android.content.SharedPreferences.Editor.putValue(name: String, value: Any?) {
+        when (value) {
+            is String -> putString(name, value)
+            is Long -> putLong(name, value)
+            is Int -> putInt(name, value)
+            is Boolean -> putBoolean(name, value)
+            is Float -> putFloat(name, value)
+        }
     }
 
     internal fun movedAddedGame(all: Map<String, *>, from: String, to: String): Map<String, Pair<String, Any?>> =
@@ -1091,20 +1144,25 @@ object SessionPrefs {
     /** Compositor frame limit that releases buffers to the game unpaced. */
     const val FPS_UNPACED = -1
 
+    /** The drawer's frame limit slider: its first stop is Off. */
+    const val FPS_LIMIT_OFF = 15
+    const val FPS_LIMIT_MAX = 165
+
     /**
      * Buffers go back to the game as soon as they are replaced instead of once per refresh;
-     * Steam's Frame Limit in the Quick Access menu caps games. Mirroring still follows the glasses' refresh rate.
+     * Steam's Frame Limit in the Quick Access menu caps Steam games, and the drawer's limit caps games
+     * launched without Steam. Mirroring still follows the glasses' refresh rate.
      */
-    fun compositorFpsLimit(mirrorRefreshLimit: Int): Int =
-        if (mirrorRefreshLimit <= 0) FPS_UNPACED else mirrorRefreshLimit
+    const val PIP_FPS = 30
 
-    private const val STEAM_UI_FPS = 60f
-
-    fun steamUiPacing(context: Context): Boolean = prefs(context).getBoolean("steamUiPacing", true)
-
-    fun steamUiFpsLimit(refreshHz: Float): Int {
-        val steps = ((refreshHz + 0.5f) / STEAM_UI_FPS).toInt()
-        return if (steps < 2) 0 else (refreshHz / steps + 0.01f).toInt()
+    fun compositorFpsLimit(mirrorRefreshLimit: Int, sessionLimit: Int = 0, pip: Boolean = false): Int {
+        val limit = when {
+            mirrorRefreshLimit <= 0 && sessionLimit <= 0 -> FPS_UNPACED
+            mirrorRefreshLimit <= 0 -> sessionLimit
+            sessionLimit <= 0 -> mirrorRefreshLimit
+            else -> minOf(mirrorRefreshLimit, sessionLimit)
+        }
+        return if (pip && mirrorRefreshLimit <= 0 && (limit <= 0 || limit > PIP_FPS)) PIP_FPS else limit
     }
 
     val upscalerChoices = listOf(

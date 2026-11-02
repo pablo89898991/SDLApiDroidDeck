@@ -74,6 +74,7 @@ class ModeSettings(
     val mic: Boolean?,
     val gameStorage: String? = null,
     val storageOptions: List<com.droiddeck.launcher.session.GameStorage.Option> = emptyList(),
+    val steamLibraries: List<com.droiddeck.launcher.session.SteamLibraries.Entry> = emptyList(),
     val storageDiagnostics: Boolean = false,
     val fexPreset: String? = null,
     val forceSsbs: Boolean = false,
@@ -81,9 +82,7 @@ class ModeSettings(
     val picturePosition: String? = null,
     val stretch16x9: Boolean? = null,
     val steamClientArch: String? = null,
-    /** Steam only: a game launched from the front end returns there when it closes; null hides the row. */
     val returnAfterGame: Boolean? = null,
-    /** Steam only: the client's Shader Pre-Caching setting; null hides the row. */
     val shaderPrecache: Boolean? = null,
     val steamRepairQueued: Boolean = false,
     val mangoapp: Boolean = true,
@@ -126,6 +125,9 @@ class ModeSettingsActions(
     val onGameStorage: (path: String, label: String) -> Unit = { _, _ -> },
     val onPickGameStorageFolder: () -> Unit = {},
     val onStorageDiagnostics: (Boolean) -> Unit = {},
+    val onAddSteamLibrary: () -> Unit = {},
+    val onRenameSteamLibrary: (id: String, label: String) -> Unit = { _, _ -> },
+    val onRemoveSteamLibrary: (id: String) -> Unit = {},
     val onFexPreset: (String) -> Unit = {},
     val onForceSsbs: (Boolean) -> Unit = {},
     val onSyncBackend: (String) -> Unit = {},
@@ -156,15 +158,12 @@ class ModeSettingsActions(
     val onDismiss: () -> Unit,
 )
 
-/** "2610 r3" from droiddeck-fex-update's FEX_TAG line (fex-2610-r3), the build x86 programs fall back to. */
 internal fun fexVersionOf(script: String): String? =
     Regex("""(?m)^FEX_TAG=(fex-\d+-r\d+)\s*$""").find(script)?.let { fexVersionOfTag(it.groupValues[1]) }
 
-/** "2610 r5" from a tag such as fex-2610-r5. */
 internal fun fexVersionOfTag(tag: String): String? =
     Regex("""fex-(\d+)-r(\d+)""").matchEntire(tag.trim())?.let { "${it.groupValues[1]} r${it.groupValues[2]}" }
 
-/** The build installed in the runtime, else the one fex.json names, else the one the launcher pins. */
 @Composable
 private fun x64FexVersion(context: android.content.Context): String? = remember {
     val root = com.droiddeck.launcher.runtime.LinuxRuntime.rootDir(context)
@@ -406,6 +405,34 @@ fun ModeSheetRows(s: ModeSettings, a: ModeSettingsActions, tab: String, extras: 
                 stringResource(R.string.mode_storage_diagnostics_hint), s.storageDiagnostics,
                 onChange = a.onStorageDiagnostics,
             )
+        }
+        if (s.gameStorage != null) SettingsGroup(stringResource(R.string.libraries_title), detail = stringResource(R.string.libraries_applies_next)) {
+            var renaming by remember { mutableStateOf<com.droiddeck.launcher.session.SteamLibraries.Entry?>(null) }
+            for (library in s.steamLibraries) {
+                val attached = library.host.isDirectory
+                SettingsRow(library.label, if (attached) library.path else stringResource(R.string.libraries_missing, library.path)) {
+                    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
+                        SecondaryButton(stringResource(R.string.libraries_rename), compact = true) { renaming = library }
+                        SecondaryButton(stringResource(R.string.edit_remove), compact = true) { a.onRemoveSteamLibrary(library.id) }
+                    }
+                }
+            }
+            SettingsRow(
+                stringResource(R.string.libraries_add),
+                if (s.steamLibraries.size < com.droiddeck.launcher.session.SteamLibraries.MAX) stringResource(R.string.libraries_hint)
+                else stringResource(R.string.libraries_full, com.droiddeck.launcher.session.SteamLibraries.MAX),
+            ) {
+                SecondaryButton(
+                    stringResource(R.string.mode_choose_folder),
+                    enabled = s.steamLibraries.size < com.droiddeck.launcher.session.SteamLibraries.MAX,
+                    onClick = a.onAddSteamLibrary,
+                )
+            }
+            renaming?.let { library ->
+                TextEntryDialog(stringResource(R.string.libraries_rename_title), library.label, onDismiss = { renaming = null }) { name ->
+                    a.onRenameSteamLibrary(library.id, name)
+                }
+            }
         }
     }
     if (tab == SheetTab.STEAM && steam) {

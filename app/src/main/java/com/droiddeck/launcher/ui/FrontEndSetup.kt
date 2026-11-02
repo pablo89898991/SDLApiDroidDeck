@@ -435,21 +435,23 @@ internal fun SetupPanel(
                                     s.launcherFullscreen,
                                 ) { a.onLauncherFullscreen(it) }
                                 if (s.dualScreenDevice) {
-                                    ChoiceRow(
-                                        host, "dual-screen", stringResource(R.string.setup_dual_screen), stringResource(R.string.setup_dual_screen_hint),
-                                        listOf(
-                                            com.droiddeck.launcher.input.DualScreen.MODE_AUTO to stringResource(R.string.setup_dual_screen_auto),
-                                            com.droiddeck.launcher.input.DualScreen.MODE_ON to stringResource(R.string.setup_dual_screen_on),
-                                            com.droiddeck.launcher.input.DualScreen.MODE_OFF to stringResource(R.string.setup_dual_screen_off),
-                                        ),
-                                        s.dualScreenMode, onPick = a.onDualScreenMode,
+                                    val dualModes = listOf(
+                                        com.droiddeck.launcher.input.DualScreen.MODE_AUTO to stringResource(R.string.setup_dual_screen_auto),
+                                        com.droiddeck.launcher.input.DualScreen.MODE_ON to stringResource(R.string.setup_dual_screen_on),
+                                        com.droiddeck.launcher.input.DualScreen.MODE_OFF to stringResource(R.string.setup_dual_screen_off),
                                     )
-                                }
-                                if (s.dualScreenDevice && s.dualScreenMode != com.droiddeck.launcher.input.DualScreen.MODE_OFF) {
-                                    ToggleRow(host, "dual-screen-menu", stringResource(R.string.setup_dual_screen_menu),
-                                        stringResource(R.string.setup_dual_screen_menu_hint), s.dualScreenLauncher) { a.onDualScreenLauncher(it) }
-                                    ToggleRow(host, "dual-screen-controls", stringResource(R.string.setup_dual_screen_controls),
-                                        stringResource(R.string.setup_dual_screen_controls_hint), s.dualScreenControls) { a.onDualScreenControls(it) }
+                                    ChoiceRow(
+                                        host, "dual-screen", stringResource(R.string.setup_dual_screen_launcher), stringResource(R.string.setup_dual_screen_launcher_hint),
+                                        dualModes, s.dualScreenMode, onPick = a.onDualScreenMode,
+                                    )
+                                    ChoiceRow(
+                                        host, "dual-screen-sessions", stringResource(R.string.setup_dual_screen_sessions), stringResource(R.string.setup_dual_screen_sessions_hint),
+                                        dualModes, s.dualScreenSessions, onPick = a.onDualScreenSessions,
+                                    )
+                                    if (s.dualScreenSessions != com.droiddeck.launcher.input.DualScreen.MODE_OFF) {
+                                        ToggleRow(host, "dual-screen-controls", stringResource(R.string.setup_dual_screen_controls),
+                                            stringResource(R.string.setup_dual_screen_controls_hint), s.dualScreenControls) { a.onDualScreenControls(it) }
+                                    }
                                 }
                             }
                         }
@@ -704,7 +706,6 @@ private fun GameSettingsCard(host: MenuHost, game: com.droiddeck.launcher.fronte
     GameSettingsMenus(host, game, state)
 }
 
-/** The per-game settings menus, opened by setting [MenuHost.open] to [GAME_SETTINGS_MENU]. */
 @Composable
 internal fun GameSettingsMenus(host: MenuHost, game: com.droiddeck.launcher.frontend.Library.SteamGame, state: GameSettingsState) {
     val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
@@ -913,14 +914,12 @@ private fun LanguageRow(host: MenuHost, chosen: String, onPick: (String) -> Unit
     }
 }
 
-/** How fast Inner Gamer cycles its colours. */
 @Composable
 private fun RgbSpeedRow() {
     val ctx = androidx.compose.ui.platform.LocalContext.current.applicationContext
     SliderRow(stringResource(R.string.theme_rgb_speed), stringResource(R.string.theme_rgb_speed_hint), Themes.rgbSpeed, 1..Themes.RGB_SPEEDS) { Themes.setRgbSpeed(ctx, it) }
 }
 
-/** The two colours of the Gradient theme, each a small square that opens the colour picker. */
 @Composable
 private fun GradientColorRows() {
     val ctx = androidx.compose.ui.platform.LocalContext.current.applicationContext

@@ -750,6 +750,29 @@ object SessionPrefs {
 
     fun zinkLazy(context: Context): Boolean = prefs(context).getBoolean("zinkLazy", true)
 
+    @JvmStatic
+    fun vkBridge(context: Context): Boolean = prefs(context).getBoolean("vkBridge", com.droiddeck.launcher.core.DeviceSupport.mali())
+
+    fun setVkBridge(context: Context, on: Boolean) {
+        prefs(context).edit().putBoolean("vkBridge", on).apply()
+    }
+
+    @JvmStatic
+    fun bridgeProtonDxvk(context: Context): Boolean = prefs(context).getBoolean("bridgeProtonDxvk", false)
+
+    fun setBridgeProtonDxvk(context: Context, on: Boolean) {
+        prefs(context).edit().putBoolean("bridgeProtonDxvk", on).apply()
+    }
+
+    fun vkBridgeSafe(context: Context): Boolean = prefs(context).getBoolean("vkBridgeSafe", true)
+
+    fun setVkBridgeSafe(context: Context, on: Boolean) {
+        prefs(context).edit().putBoolean("vkBridgeSafe", on).apply()
+    }
+
+    @JvmStatic
+    fun vkBridgeMode(context: Context): String = if (vkBridgeSafe(context)) "safe" else "performance"
+
     fun setZinkLazy(context: Context, on: Boolean) {
         prefs(context).edit().putBoolean("zinkLazy", on).apply()
     }
@@ -844,6 +867,9 @@ object SessionPrefs {
 
     fun battleNetNoSteamSet(context: Context): Boolean = prefs(context).getBoolean("battleNetNoSteamSet", false)
     fun setBattleNetNoSteamSet(context: Context) { prefs(context).edit().putBoolean("battleNetNoSteamSet", true).apply() }
+
+    fun battleNetFolder(context: Context, code: String): String? = prefs(context).getString("battleNetFolder:$code", null)
+    fun setBattleNetFolder(context: Context, code: String, path: String) { prefs(context).edit().putString("battleNetFolder:$code", path).apply() }
 
     fun clearCachedApps(context: Context): Boolean = prefs(context).getBoolean("clearCachedApps", false)
     fun setClearCachedApps(context: Context, on: Boolean) { prefs(context).edit().putBoolean("clearCachedApps", on).apply() }
@@ -964,10 +990,17 @@ object SessionPrefs {
         prefs(context).edit().apply { if (name == null) remove("bootMovieCustomName") else putString("bootMovieCustomName", name) }.apply()
     }
 
-    fun runSteamAtStartup(context: Context): Boolean = prefs(context).getBoolean("runSteamAtStartup", false)
+    const val STARTUP_OFF = ""
+    const val STARTUP_STEAM = "steam"
+    const val STARTUP_DESKTOP = "desktop"
 
-    fun setRunSteamAtStartup(context: Context, on: Boolean) {
-        prefs(context).edit().putBoolean("runSteamAtStartup", on).apply()
+    fun startupSession(context: Context): String {
+        val p = prefs(context)
+        return p.getString("startupSession", null) ?: if (p.getBoolean("runSteamAtStartup", false)) STARTUP_STEAM else STARTUP_OFF
+    }
+
+    fun setStartupSession(context: Context, id: String) {
+        prefs(context).edit().putString("startupSession", id).remove("runSteamAtStartup").apply()
     }
 
     fun addedGamesDirs(context: Context): List<String> {

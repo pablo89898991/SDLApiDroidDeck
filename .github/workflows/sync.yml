@@ -59,6 +59,10 @@ jobs:
           set -euo pipefail
           git clone --depth 1 https://github.com/Droid-Deck/DroidDeck /tmp/up
           echo "UP_SHA=$(git -C /tmp/up rev-parse --short HEAD)" >> "$GITHUB_ENV"
+          # upstream's submodules (external/MaliBridge, ...): the commit each one is pinned to. Copying files can't
+          # carry them (they are git links, not files), so they are set in the index below, as upstream has them.
+          git -C /tmp/up ls-files -s | awk '$1 == "160000"' > /tmp/up-gitlinks
+          echo "upstream submodules:"; cat /tmp/up-gitlinks
           rm -rf /tmp/up/.git
           git clone --depth 1 --branch "${{ inputs.bridge_ref || 'main' }}" "https://github.com/$BRIDGE_REPO" /tmp/sdlbridge
           echo "BRIDGE_SHA=$(git -C /tmp/sdlbridge rev-parse --short HEAD)" >> "$GITHUB_ENV"
@@ -79,6 +83,13 @@ jobs:
           git config user.name  "sdl3-sync[bot]"
           git config user.email "sdl3-sync@users.noreply.github.com"
           git add -A
+          # upstream's submodules, pinned where upstream pins them (.gitmodules came with the files)
+          while IFS=$'\t' read -r meta path; do
+            [ -n "$path" ] || continue
+            sha=$(awk '{print $2}' <<<"$meta")
+            git update-index --add --cacheinfo "160000,$sha,$path"
+            echo "submodule $path -> $sha"
+          done < /tmp/up-gitlinks
           if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "Nothing changed since the last sync."

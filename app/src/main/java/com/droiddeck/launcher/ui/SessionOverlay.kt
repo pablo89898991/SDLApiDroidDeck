@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material.icons.outlined.DesktopWindows
 import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ScreenShare
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PictureInPictureAlt
@@ -173,6 +174,7 @@ private val SessionDrawerPage.title: Int get() = when (this) {
     SessionDrawerPage.VR -> R.string.vr_title
     SessionDrawerPage.EFFECTS -> R.string.drawer_page_effects
     SessionDrawerPage.GAMES -> R.string.game_settings_title
+    SessionDrawerPage.AGENT -> R.string.rail_agent
     SessionDrawerPage.SDL3BRIDGE -> R.string.drawer_page_sdl3bridge
     SessionDrawerPage.SESSION -> R.string.mode_session
 }
@@ -186,6 +188,7 @@ private val SessionDrawerPage.icon get() = when (this) {
     SessionDrawerPage.VR -> VrHeadsetIcon
     SessionDrawerPage.EFFECTS -> Icons.Outlined.AutoFixHigh
     SessionDrawerPage.GAMES -> Icons.Outlined.Layers
+    SessionDrawerPage.AGENT -> Icons.Outlined.AutoAwesome
     SessionDrawerPage.SDL3BRIDGE -> Icons.Outlined.Usb
     SessionDrawerPage.SESSION -> Icons.Outlined.Settings
 }
@@ -555,7 +558,12 @@ internal fun SessionDrawer(open: Boolean, requestedPage: SessionDrawerPage, cont
                     glassesPages, glassesTab, modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     tabModifier = { key -> focus.track(page, "glasses-tab-$key").testTag("glasses-tab-$key") },
                 ) { selectedGlassesTab = it }
-                Column(
+                // The agent's chat scrolls itself and keeps its composer at the bottom, so it takes the height left.
+                if (page == SessionDrawerPage.AGENT) AgentPage(
+                    Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp, start = 14.dp, end = 14.dp),
+                    inputModifier = focus.track(page, "agent-input"),
+                    visible = open,
+                ) else Column(
                     modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(pageScroll.getValue(page)),
                 ) { CompositionLocalProvider(LocalChipMinWidth provides 96.dp, LocalCompactSettings provides true) {
                     when (page) {
@@ -770,6 +778,7 @@ internal fun SessionDrawer(open: Boolean, requestedPage: SessionDrawerPage, cont
                                 track = { key -> focus.track(page, key) },
                             )
                         }
+                        SessionDrawerPage.AGENT -> Unit
                         SessionDrawerPage.SDL3BRIDGE -> SdlBridgeSettingsTab(host) { key -> focus.track(page, key) }
                         SessionDrawerPage.SESSION -> {
                             if (a.isHomeApp) SettingsGroup(stringResource(R.string.drawer_android_apps)) {

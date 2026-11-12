@@ -57,6 +57,7 @@ public final class PadBridge {
     private final PadState[] playerStates = new PadState[SLOTS];
     private final boolean[] bridgeSlots = new boolean[SLOTS]; // slots fed by the SDL3 bridge app
     private final float[][] rawSticks = new float[SLOTS][4];
+    private final boolean[][] keyTriggers = new boolean[SLOTS][2];
     private final int[] retainedSticks = new int[SLOTS];
     private final PadState effectiveState = new PadState();
     private final PadState homeGuideReport = new PadState();
@@ -291,7 +292,10 @@ public final class PadBridge {
 
     public static boolean isControllerKeyEvent(KeyEvent event) {
         if (DualSenseBridge.isBridged(event)) return false;
-        InputDevice device = event.getDevice();
+        return isControllerKeyEvent(event, event.getDevice());
+    }
+
+    static boolean isControllerKeyEvent(KeyEvent event, InputDevice device) {
         if (device == null || device.isVirtual() || isSystemVirtualInputName(device.getName())) return false;
         if (KeyEvent.isGamepadButton(event.getKeyCode())) {
             return device.supportsSource(InputDevice.SOURCE_GAMEPAD)
@@ -317,7 +321,10 @@ public final class PadBridge {
 
     public static boolean isControllerMotionEvent(MotionEvent event) {
         if (DualSenseBridge.isBridged(event)) return false;
-        InputDevice device = event.getDevice();
+        return isControllerMotionEvent(event, event.getDevice());
+    }
+
+    static boolean isControllerMotionEvent(MotionEvent event, InputDevice device) {
         return event.isFromSource(InputDevice.SOURCE_JOYSTICK) && device != null && !device.isVirtual()
                 && !isSystemVirtualInputName(device.getName())
                 && (device.supportsSource(InputDevice.SOURCE_GAMEPAD)
@@ -378,10 +385,11 @@ public final class PadBridge {
     }
 
     public synchronized boolean onKeyEvent(KeyEvent event) {
-        if (!isControllerKeyEvent(event) || excluded.test(event.getDeviceId())) return false;
-        int slot = slotFor(event.getDevice());
+        InputDevice device = event.getDevice();
+        if (!isControllerKeyEvent(event, device) || excluded.test(event.getDeviceId())) return false;
+        int slot = slotFor(device);
         if (slot < 0) return false;
-        int side = JoyCon.side(event.getDevice());
+        int side = JoyCon.side(device);
         if (side >= 0 && partners[slot] != NO_CONTROLLER && JoyCon.isRail(side, event.getScanCode())) return true;
         long timing = InputTiming.begin();
         PadState pad = stateFor(slot);
@@ -403,18 +411,18 @@ public final class PadBridge {
             case KeyEvent.KEYCODE_HOME:
             case KeyEvent.KEYCODE_MOVE_HOME: pad.press(PadState.GUIDE, pressed); break;
             case KeyEvent.KEYCODE_BUTTON_Z:
-                if (isPrimary(event)) DeckControls.INSTANCE.setGrip(isNovaController(event.getDevice()) ? DeckControls.R4 : DeckControls.L4, pressed);
+                if (isPrimary(event)) DeckControls.INSTANCE.setGrip(isNovaController(device) ? DeckControls.R4 : DeckControls.L4, pressed);
                 break;
             case KeyEvent.KEYCODE_BUTTON_C:
-                if (isPrimary(event)) DeckControls.INSTANCE.setGrip(isNovaController(event.getDevice()) ? DeckControls.L4 : DeckControls.R4, pressed);
+                if (isPrimary(event)) DeckControls.INSTANCE.setGrip(isNovaController(device) ? DeckControls.L4 : DeckControls.R4, pressed);
                 break;
             case KeyEvent.KEYCODE_BUTTON_L2:
                 pad.leftTrigger = keyTrigger(pad.leftTrigger, pressed, event.getRepeatCount(),
-                        analogTrigger(event.getDevice(), MotionEvent.AXIS_LTRIGGER, MotionEvent.AXIS_BRAKE));
+                        analogTrigger(device, MotionEvent.AXIS_LTRIGGER, MotionEvent.AXIS_BRAKE), keyTriggers[slot], 0);
                 break;
             case KeyEvent.KEYCODE_BUTTON_R2:
                 pad.rightTrigger = keyTrigger(pad.rightTrigger, pressed, event.getRepeatCount(),
-                        analogTrigger(event.getDevice(), MotionEvent.AXIS_RTRIGGER, MotionEvent.AXIS_GAS));
+                        analogTrigger(device, MotionEvent.AXIS_RTRIGGER, MotionEvent.AXIS_GAS), keyTriggers[slot], 1);
                 break;
             case KeyEvent.KEYCODE_DPAD_UP: pad.up = pressed; break;
             case KeyEvent.KEYCODE_DPAD_RIGHT: pad.right = pressed; break;
@@ -422,7 +430,7 @@ public final class PadBridge {
             case KeyEvent.KEYCODE_DPAD_LEFT: pad.left = pressed; break;
             default: return false;
         }
-        noteDevice(event.getDevice(), slot);
+        noteDevice(device, slot);
         if (pressed && event.getRepeatCount() == 0 && !event.isCanceled()) noteChordInput(slot);
         if (pressed) notePlayerInput();
         statButtons++;
@@ -474,6 +482,7 @@ public final class PadBridge {
         stateFor(slot).clear();
         retainedSticks[slot] = 0;
         Arrays.fill(rawSticks[slot], 0f);
+        Arrays.fill(keyTriggers[slot], false);
     }
 
     private void mutateState(java.util.function.Consumer<PadState> mutation) {
@@ -492,16 +501,16 @@ public final class PadBridge {
     }
 
     public synchronized boolean onMotionEvent(MotionEvent event) {
-        if (!isControllerMotionEvent(event) || excluded.test(event.getDeviceId())) return false;
+        InputDevice device = event.getDevice();
+        if (!isControllerMotionEvent(event, device) || excluded.test(event.getDeviceId())) return false;
         if (event.getAction() != MotionEvent.ACTION_MOVE) return false;
-        int slot = slotFor(event.getDevice());
+        int slot = slotFor(device);
         if (slot < 0) return false;
         long timing = InputTiming.begin();
         PadState pad = stateFor(slot);
-        noteDevice(event.getDevice(), slot);
+        noteDevice(device, slot);
         statAxes++;
         scheduleStats();
-        InputDevice device = event.getDevice();
         int side = JoyCon.side(device);
         if (side >= 0) {
             int[] stick = JoyCon.stickAxes(side, device, event.getSource());
@@ -518,7 +527,7 @@ public final class PadBridge {
         }
         float lx = event.getAxisValue(MotionEvent.AXIS_X);
         float ly = event.getAxisValue(MotionEvent.AXIS_Y);
-        boolean wired = wiredXboxLayout(event);
+        boolean wired = wiredXboxLayout(device, event.getSource());
         float rx = event.getAxisValue(wired ? MotionEvent.AXIS_RX : MotionEvent.AXIS_Z);
         float ry = event.getAxisValue(wired ? MotionEvent.AXIS_RY : MotionEvent.AXIS_RZ);
         retainStick(slot, JoyCon.LEFT, lx, ly);
@@ -528,11 +537,11 @@ public final class PadBridge {
         float lt = 0f;
         float rt = 0f;
         if (wired || hasAxis(device, source, MotionEvent.AXIS_LTRIGGER, MotionEvent.AXIS_BRAKE)) {
-            lt = leftTrigger(event, wired);
+            lt = axisTrigger(leftTrigger(event, wired), keyTriggers[slot], 0);
             pad.leftTrigger = lt;
         }
         if (wired || hasAxis(device, source, MotionEvent.AXIS_RTRIGGER, MotionEvent.AXIS_GAS)) {
-            rt = rightTrigger(event, wired);
+            rt = axisTrigger(rightTrigger(event, wired), keyTriggers[slot], 1);
             pad.rightTrigger = rt;
         }
         if (hasAxis(device, source, MotionEvent.AXIS_HAT_X)) {
@@ -556,9 +565,27 @@ public final class PadBridge {
         return true;
     }
 
-    static float keyTrigger(float current, boolean pressed, int repeatCount, boolean analog) {
-        if (analog || repeatCount > 0) return current;
-        return pressed ? 1f : 0f;
+    static float keyTrigger(float current, boolean pressed, int repeatCount, boolean analog, boolean[] held, int side) {
+        if (repeatCount > 0) return current;
+        if (!analog) {
+            held[side] = pressed;
+            return pressed ? 1f : 0f;
+        }
+        if (pressed) {
+            if (current != 0f) return current;
+            held[side] = true;
+            return 1f;
+        }
+        if (!held[side]) return current;
+        held[side] = false;
+        return 0f;
+    }
+
+    static float axisTrigger(float value, boolean[] held, int side) {
+        if (!held[side]) return value;
+        if (value == 0f) return 1f;
+        held[side] = false;
+        return value;
     }
 
     static boolean analogTrigger(InputDevice device, int... axes) {
@@ -1023,7 +1050,7 @@ public final class PadBridge {
     }
 
     private boolean isPrimary(KeyEvent event) {
-        int id = event.getDevice().getId();
+        int id = event.getDeviceId();
         int first = firstPlayerSlot();
         return owners[first] == id || partners[first] == id;
     }

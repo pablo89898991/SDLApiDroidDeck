@@ -335,7 +335,8 @@ report at a time), with no taps lost instead of up to 4 in 10. When Steam reads 
 - **One source for the bridge**: the sync takes the bridge's code and the patch script straight from the
   [SdlBridge](https://github.com/pablo89898991/SdlBridge) repo, so a change pushed there is in the next build.
   Run *Sync upstream + SDL3 bridge* by hand to build it right away.
-- **SDL3** comes from its pinned release (`droiddeck/sdl3.env` in SdlBridge, SHA-256 checked) and is built into
+- **SDL3** comes from its pinned release (`droiddeck/sdl3.env` in SdlBridge, SHA-256 checked; SdlBridge's "SDL update"
+  workflow moves the pin to each new stable SDL3 release after testing it) and is built into
   the APK. The bridge runs in its own process inside the app (`:sdl3`), so a controller-driver crash can't take your
   Steam session down.
 - **Signing**: built by upstream's own workflow and signed with its test key, like SDL3Deck, so each build installs
@@ -348,7 +349,8 @@ report at a time), with no taps lost instead of up to 4 in 10. When Steam reads 
   becomes a release with `SDL3DroidDeck.apk`; the newest 10 are kept). The APK is built on `sdl3droiddeck`, which the
   sync fills.
 - Repo secret `SYNC_PAT`: a GitHub token with **repo** + **workflow** scope (GitHub doesn't let the built-in token
-  push workflow files). Optional: `DOCKERHUB_USER` / `DOCKERHUB_TOKEN`, so the build pulls its Debian image from
+  push workflow files). Tokens expire (classic ones after 30 days by default): when it does, the sync's first step
+  says so -- regenerate it at github.com/settings/tokens and paste the new value into the secret. Optional: `DOCKERHUB_USER` / `DOCKERHUB_TOKEN`, so the build pulls its Debian image from
   Docker Hub signed in.
 - Then *Actions → Sync upstream + SDL3 bridge → Run workflow*. It runs daily after that.
 

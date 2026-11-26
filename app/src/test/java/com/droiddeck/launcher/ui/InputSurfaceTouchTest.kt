@@ -77,6 +77,25 @@ class InputSurfaceTouchTest {
         assertFalse(state().isDown(PadState.A))
     }
 
+    @Test fun steamDeckStylingKeepsTheHeldButtonAndItsHitArea() {
+        val button = a.copy(buttonShape = InputButtonShape.CIRCLE)
+        show(button)
+        val surface = view.inputSurface
+        val shown = surface.shownElements
+
+        touch(MotionEvent.ACTION_DOWN, 1 to (800f to 240f))
+        assertTrue(state().isDown(PadState.A))
+        for (artwork in PadKit.entries) {
+            surface.updateStyle(InputSurfaceStyle(), artwork)
+            assertEquals(shown, surface.shownElements)
+            assertTrue(surface.takesTouchAt(800f, 240f))
+            assertTrue(state().isDown(PadState.A))
+        }
+
+        touch(MotionEvent.ACTION_UP, 1 to (800f to 240f))
+        assertFalse(state().isDown(PadState.A))
+    }
+
     @Test fun aStickKeepsItsFingerWhenItCrossesAButton() {
         touch(MotionEvent.ACTION_DOWN, 1 to (200f to 300f))
         touch(MotionEvent.ACTION_MOVE, 1 to (800f to 240f))
@@ -95,6 +114,24 @@ class InputSurfaceTouchTest {
         assertEquals(listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP), missed)
         view.onTouchMiss = null
         assertFalse(touch(MotionEvent.ACTION_DOWN, 1 to (800f to 240f), tool = MotionEvent.TOOL_TYPE_MOUSE))
+        assertFalse(state().isDown(PadState.A))
+    }
+
+    @Test fun aPenPressesButtonsLikeAFingerAndItsMissesKeepTheirHistory() {
+        touch(MotionEvent.ACTION_DOWN, 1 to (800f to 240f), tool = MotionEvent.TOOL_TYPE_STYLUS)
+        assertTrue(state().isDown(PadState.A))
+        touch(MotionEvent.ACTION_UP, 1 to (800f to 240f), tool = MotionEvent.TOOL_TYPE_STYLUS)
+        assertFalse(state().isDown(PadState.A))
+        val missed = mutableListOf<List<Long>>()
+        view.onTouchMiss = { event -> missed += (0 until event.historySize).map { event.getHistoricalEventTime(it) } + event.eventTime }
+        touch(MotionEvent.ACTION_DOWN, 1 to (500f to 100f), tool = MotionEvent.TOOL_TYPE_STYLUS)
+        val properties = arrayOf(MotionEvent.PointerProperties().apply { id = 1; toolType = MotionEvent.TOOL_TYPE_STYLUS })
+        fun coords(x: Float) = arrayOf(MotionEvent.PointerCoords().apply { this.x = x; y = 100f; pressure = 0.5f })
+        val move = MotionEvent.obtain(1000L, 2000L, MotionEvent.ACTION_MOVE, 1, properties, coords(510f), 0, 0, 1f, 1f, 0, 0, 0, 0)
+        move.addBatch(2003L, coords(520f), 0)
+        move.addBatch(2006L, coords(530f), 0)
+        try { view.dispatchTouchEvent(move) } finally { move.recycle() }
+        assertEquals(listOf(listOf(time - 1), listOf(2000L, 2003L, 2006L)), missed)
         assertFalse(state().isDown(PadState.A))
     }
 

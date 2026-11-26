@@ -117,6 +117,7 @@ import com.droiddeck.launcher.IconPack
 import android.content.pm.ShortcutInfo
 import android.graphics.Bitmap
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.withContext
 import com.droiddeck.launcher.HomeWidgets
@@ -341,7 +342,28 @@ internal fun AndroidAppsPage(s: FrontEndState, a: FrontEndActions, modifier: Mod
         openFolder = f.id
     }
 
-    Box(modifier) {
+    val ff = LocalFrontFocus.current
+    var holdFocus by remember { mutableStateOf<String?>(null) }
+    var pageFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(holdFocus) {
+        val key = "tile:folder:${holdFocus ?: return@LaunchedEffect}"
+        // A folder closed from its name field: the platform field and the fading sheet both drop focus after the sheet asked for the tile, so keep asking until the sheet is gone.
+        val until = System.nanoTime() + 400_000_000L
+        while (System.nanoTime() < until) {
+            androidx.compose.runtime.withFrameNanos { }
+            if (ff != null && !(ff.last == key && pageFocused)) runCatching { ff.items[key]?.requestFocus() }
+        }
+        holdFocus = null
+    }
+    Box(
+        modifier.onFocusChanged { pageFocused = it.hasFocus }
+            // A fresh press means the user is moving on, so the hold must not pull focus back to the folder.
+            .onPreviewKeyEvent { event ->
+                val k = event.nativeKeyEvent
+                if (holdFocus != null && k.action == KeyEvent.ACTION_DOWN && k.repeatCount == 0) holdFocus = null
+                false
+            },
+    ) {
         Column(Modifier.fillMaxSize().imePadding()) {
             Box(Modifier.fillMaxWidth().padding(start = padH, end = padH, top = if (narrow) 8.dp else 12.dp)) {
                 ModeHeader(
@@ -367,21 +389,49 @@ internal fun AndroidAppsPage(s: FrontEndState, a: FrontEndActions, modifier: Mod
             }
             val front = LocalFrontFocus.current
             val steer = rememberCoroutineScope()
-            // Down goes to the tile straight below. The grid's own search only sees the tiles laid out so far, so above a short or
+            // The tile a move is heading to, by its id so that a list update cannot shift it, and the number of the latest move.
+            val aim = remember { arrayOfNulls<String>(1) }
+            val moves = remember { intArrayOf(0) }
+            val move = remember { arrayOfNulls<Job>(1) }
+            // Up and Down go to the tile straight above or below. The grid's own search works from where the tiles are drawn at that
+            // moment, so while a scroll is still catching up with fast presses it skips a row or drifts a column, and above a short or
             // unseen last row it lands on a tile further left; above a gap in a short last row the row's last tile takes it.
+            // Presses aim from the tile a move is already heading to, so none is lost before the focus lands.
             Box(Modifier.weight(1f).fillMaxWidth().onPreviewKeyEvent { event ->
                 val k = event.nativeKeyEvent
-                if (k.keyCode != KeyEvent.KEYCODE_DPAD_DOWN || front == null) return@onPreviewKeyEvent false
-                val from = entries.indexOfFirst { tileId(it) == front.last }
+                val down = k.keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                if ((!down && k.keyCode != KeyEvent.KEYCODE_DPAD_UP) || front == null) return@onPreviewKeyEvent false
+                val aimed = aim[0]?.let { id -> entries.indexOfFirst { tileId(it) == id } } ?: -1
+                if (aim[0] != null && aimed < 0) {
+                    // The tile a move was heading to has left the list: that move is dropped and the press aims from the focus.
+                    move[0]?.cancel()
+                    aim[0] = null
+                }
+                val from = aimed.takeIf { it >= 0 } ?: entries.indexOfFirst { tileId(it) == front.last }
                 val columns = (grid.layoutInfo.visibleItemsInfo.maxOfOrNull { it.column } ?: 0) + 1
-                if (from < 0 || from / columns == entries.lastIndex / columns) return@onPreviewKeyEvent false
+                if (from < 0) return@onPreviewKeyEvent false
+                // At the first or last row the press leaves the grid, unless a move has not landed yet: then it waits for it.
+                val edge = if (down) from / columns == entries.lastIndex / columns else from < columns
+                if (edge) return@onPreviewKeyEvent aim[0] != null
                 if (k.action == KeyEvent.ACTION_DOWN) {
-                    val id = tileId(entries[minOf(from + columns, entries.lastIndex)])
-                    val shown = (front.attached[id] ?: 0) > 0
-                    if (!shown || runCatching { front.items.getValue(id).requestFocus() }.isFailure) steer.launch {
-                        // The row below is not laid out yet: bring it in, then take it.
-                        if (!shown) grid.scrollBy((grid.layoutInfo.visibleItemsInfo.firstOrNull { it.index == from + leadItems }?.size?.height ?: 0).toFloat())
-                        focusSoon { front.items.getValue(id) }
+                    val to = if (down) minOf(from + columns, entries.lastIndex) else from - columns
+                    val id = tileId(entries[to])
+                    aim[0] = id
+                    val mine = ++moves[0]
+                    // A newer move replaces the one still on its way, so an older target cannot take focus after it lands.
+                    move[0]?.cancel()
+                    move[0] = steer.launch {
+                        try {
+                            // Show the row before it takes focus. The grid composes rows ahead of the view without placing them, and a
+                            // tile focused there neither scrolls in nor has a place for the next search to start from.
+                            grid.reveal(to + leadItems)
+                            if (moves[0] != mine) return@launch
+                            focusSoon { front.items.getValue(id) }
+                        } finally {
+                            // Also when a touch scroll cancels the reveal, so the edge rows do not keep waiting for a move that ended.
+                            // Only the latest move clears it: a cancelled one finishing late must not clear a newer move's target.
+                            if (moves[0] == mine) aim[0] = null
+                        }
                     }
                 }
                 true
@@ -443,7 +493,7 @@ internal fun AndroidAppsPage(s: FrontEndState, a: FrontEndActions, modifier: Mod
             var last by remember { mutableStateOf(folder) }
             if (folder != null) last = folder
             last?.let { f ->
-                FolderSheet(f, f.apps.mapNotNull(member).filter { it.key !in hidden }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label }), renameOnOpen, onLaunch, newFolder, { iconFor = it }) {
+                FolderSheet(f, f.apps.mapNotNull(member).filter { it.key !in hidden }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label }), renameOnOpen, onLaunch, newFolder, { iconFor = it }, onHoldFocus = { holdFocus = f.id }) {
                     openFolder = null
                     renameOnOpen = false
                 }
@@ -534,6 +584,26 @@ private fun HeaderChoiceButton(
                 }
             })
         }
+    }
+}
+
+/** Scrolls the least that shows item [index] whole inside the padding, a row at a time while it is still outside the laid out items. */
+private suspend fun LazyGridState.reveal(index: Int) {
+    repeat(4) {
+        val info = layoutInfo
+        val shown = info.visibleItemsInfo
+        val item = shown.firstOrNull { it.index == index }
+        val by = when {
+            item != null -> {
+                val bottom = item.offset.y + item.size.height - (info.viewportEndOffset - info.afterContentPadding)
+                if (item.offset.y < 0) item.offset.y else maxOf(bottom, 0)
+            }
+            index > (shown.lastOrNull() ?: return).index -> shown.last().size.height
+            index < shown.first().index -> -shown.first().size.height
+            else -> return
+        }
+        if (by == 0) return
+        scrollBy(by.toFloat())
     }
 }
 
@@ -813,7 +883,7 @@ private fun FolderTile(entry: AppEntry.Folder, first: Boolean, onOpen: () -> Uni
 private fun FolderSheet(
     folder: HomeFolders.Folder, apps: List<HomeApp.LaunchableApp>, renameFirst: Boolean,
     onLaunch: (HomeApp.LaunchableApp) -> Unit, onNewFolder: (HomeApp.LaunchableApp) -> Unit,
-    onChangeIcon: (HomeApp.LaunchableApp) -> Unit, onClose: () -> Unit,
+    onChangeIcon: (HomeApp.LaunchableApp) -> Unit, onHoldFocus: () -> Unit, onClose: () -> Unit,
 ) {
     SwipeLock()
     val ctx = LocalContext.current
@@ -827,24 +897,43 @@ private fun FolderSheet(
         renaming = false
     }
     val firstApp = remember { FocusRequester() }
+    val title = remember { FocusRequester() }
+    var toTitle by remember { mutableStateOf(false) }
+    var titleFocused by remember { mutableStateOf(false) }
+    val sheetView = androidx.compose.ui.platform.LocalView.current
+    val leaveName = {
+        if (renaming) {
+            (ctx.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager)
+                ?.hideSoftInputFromWindow(sheetView.windowToken, 0)
+            toTitle = true
+            commit()
+        }
+    }
     val inputMode = LocalInputModeManager.current.inputMode
     val ff = LocalFrontFocus.current
     val grid = rememberLazyGridState()
     var closing by remember { mutableStateOf(false) }
+    var inside by remember { mutableStateOf(false) }
     LaunchedEffect(renaming, inputMode) {
-        if (!renaming && !closing && inputMode == InputMode.Keyboard && apps.isNotEmpty()) {
+        if (!renaming && !closing && toTitle) {
+            focusWithinFrames({ titleFocused || closing }) { title }
+            toTitle = false
+        } else if (!renaming && !closing && inputMode == InputMode.Keyboard && apps.isNotEmpty()) {
             grid.scrollToItem(0)
-            repeat(2) { androidx.compose.runtime.withFrameNanos { } }
-            if (!closing) runCatching { firstApp.requestFocus() }
+            androidx.compose.runtime.withFrameNanos { }
+            // After touch, focus starts outside the page and the first request is turned to the page's own entry, behind the sheet. Ask until it is in here.
+            focusWithinFrames({ inside || closing }) { firstApp }
         }
     }
     val close = {
+        val wasRenaming = renaming
         closing = true
         if (renaming) commit()
         onClose()
         if (inputMode == InputMode.Keyboard && ff != null) {
             runCatching { ff.items.getValue("tile:folder:${folder.id}").requestFocus() }
                 .onFailure { runCatching { ff.firstTile.requestFocus() } }
+            if (wasRenaming) onHoldFocus()
         }
     }
     BackHandler { close() }
@@ -860,7 +949,14 @@ private fun FolderSheet(
                     .clip(Shape16).background(pal.surfaceVariant.copy(alpha = 0.97f))
                     .glideBorder(false, Shape16, pal.signal, pal.signal.copy(alpha = 0.22f))
                     .pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false).consume() } }
+                    .onPreviewKeyEvent { event ->
+                        val k = event.nativeKeyEvent
+                        if (!renaming || k.keyCode != KeyEvent.KEYCODE_BUTTON_B) return@onPreviewKeyEvent false
+                        if (k.action == KeyEvent.ACTION_DOWN && k.repeatCount == 0) leaveName()
+                        true
+                    }
                     .controllerBack(close)
+                    .onFocusChanged { inside = it.hasFocus }
                     .focusProperties {
                         exit = { dir ->
                             if (dir == FocusDirection.Up || dir == FocusDirection.Down || dir == FocusDirection.Left || dir == FocusDirection.Right) FocusRequester.Cancel
@@ -875,7 +971,7 @@ private fun FolderSheet(
                         AdbTextField(
                             value = name, onValueChange = { name = it.take(40) }, label = stringResource(R.string.apps_folder_name),
                             keyboardType = KeyboardType.Text, imeAction = ImeAction.Done, compact = true, showLabel = false,
-                            placeholder = folder.name, focusOnShow = true, onDone = { commit() },
+                            placeholder = folder.name, focusOnShow = true, onDone = { commit() }, onBack = leaveName,
                         )
                     } else {
                         val src = remember { MutableInteractionSource() }
@@ -888,6 +984,8 @@ private fun FolderSheet(
                             modifier = Modifier.clip(Shape12)
                                 .background(if (hot) pal.signal.copy(alpha = 0.12f) else colors.onBackground.copy(alpha = 0.07f))
                                 .glideBorder(hot, Shape12, pal.signal)
+                                .focusRequester(title)
+                                .onFocusChanged { titleFocused = it.isFocused }
                                 .hoverable(src)
                                 .clickable(interactionSource = src, indication = LocalIndication.current, onClickLabel = stringResource(R.string.apps_folder_rename), role = Role.Button, onClick = rename)
                                 .controllerConfirm(onClick = rename)

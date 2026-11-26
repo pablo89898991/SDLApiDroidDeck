@@ -26,6 +26,7 @@ public final class WaylandCompositor {
     public interface GameListener {
         void onGameSurface(String window, String gpuName);
         void onGameFrame();
+        default void onCompositorFrame() {}
         default void onGameProgram(int pid, String program) {}
     }
 
@@ -71,6 +72,12 @@ public final class WaylandCompositor {
     }
 
     @SuppressWarnings("unused")
+    static void onCompositorFrame() {
+        GameListener l = gameListener;
+        if (l != null) l.onCompositorFrame();
+    }
+
+    @SuppressWarnings("unused")
     static void onGameProgram(int pid, String program) {
         GameListener l = gameListener;
         if (l != null) l.onGameProgram(pid, program != null ? program : "");
@@ -92,6 +99,73 @@ public final class WaylandCompositor {
     static void onPointerLock(boolean locked, int x, int y) {
         PointerLockListener l = pointerLockListener;
         if (l != null) l.onPointerLock(locked, x, y);
+    }
+
+    public interface OverlayPlanesListener {
+        void onOverlayPlanes(int planes);
+    }
+
+    private static volatile OverlayPlanesListener overlayPlanesListener;
+    private static volatile int overlayPlanes = -1;
+
+    public static synchronized void setOverlayPlanesListener(OverlayPlanesListener l) {
+        overlayPlanesListener = l;
+        if (l != null) l.onOverlayPlanes(overlayPlanes);
+    }
+
+    public static synchronized void clearOverlayPlanesListener(OverlayPlanesListener l) {
+        if (overlayPlanesListener == l) overlayPlanesListener = null;
+    }
+
+    @SuppressWarnings("unused")
+    static synchronized void onOverlayPlanes(int planes) {
+        overlayPlanes = planes;
+        OverlayPlanesListener l = overlayPlanesListener;
+        if (l != null) l.onOverlayPlanes(planes);
+    }
+
+    public interface RefreshTargetListener {
+        void onRefreshTarget(int refresh, int frameRate);
+    }
+
+    private static volatile RefreshTargetListener refreshTargetListener;
+    private static volatile long refreshTarget;
+
+    public static void setRefreshTargetListener(RefreshTargetListener l) {
+        refreshTargetListener = l;
+        long target = refreshTarget;
+        if (l != null) l.onRefreshTarget((int) (target >> 32), (int) target);
+    }
+
+    public static void clearRefreshTargetListener(RefreshTargetListener l) {
+        if (refreshTargetListener == l) refreshTargetListener = null;
+    }
+
+    public interface ContentRateListener {
+        void onContentRate(int fps);
+    }
+
+    private static volatile ContentRateListener contentRateListener;
+
+    public static void setContentRateListener(ContentRateListener l) {
+        contentRateListener = l;
+    }
+
+    public static void clearContentRateListener(ContentRateListener l) {
+        if (contentRateListener == l) contentRateListener = null;
+    }
+
+    @SuppressWarnings("unused")
+    static void onContentRate(int fps) {
+        ContentRateListener l = contentRateListener;
+        if (l != null) l.onContentRate(fps);
+    }
+
+    @SuppressWarnings("unused")
+    static void onRefreshTarget(int refresh, int frameRate) {
+        refreshTarget = ((long) refresh << 32) | (frameRate & 0xffffffffL);
+        RefreshTargetListener l = refreshTargetListener;
+        if (l != null) l.onRefreshTarget(refresh, frameRate);
     }
 
     public interface ClipboardListener {
@@ -153,7 +227,7 @@ public final class WaylandCompositor {
 
     public static native void nativeStartWithSurface(Surface surface, String xdgRuntimeDir,
                                                      String driverPath, String libraryName,
-                                                     String nativeLibDir);
+                                                     String nativeLibDir, boolean allowDriverFallback);
 
     public static native void nativeSetSurface(Surface surface);
     public static native boolean nativeWaitSurface(int timeoutMs);
@@ -161,6 +235,8 @@ public final class WaylandCompositor {
     public static native void nativeSendPointer(int action, int x, int y);
 
     public static native void nativeSendTouch(int action, int pointerId, int x, int y);
+
+    public static native void nativeSendPen(int flags, int x, int y);
 
     public static native int nativeCursorSnapshot(int[] out);
 
@@ -177,6 +253,8 @@ public final class WaylandCompositor {
     public static native boolean nativeCursorInputPos(int[] out);
 
     public static native void nativeVsync(long frameTimeNanos);
+
+    public static native void nativeFrameTimeline(long presentNanos, long deadlineNanos, long periodNanos);
 
     public static native void nativeSetClockControl(String path);
 
@@ -208,7 +286,11 @@ public final class WaylandCompositor {
 
     public static native void nativeSetOutputRefreshRate(float hz);
 
+    public static native void nativeSetPanelRates(int[] rates);
+
     public static native void nativeSetZeroCopy(boolean on);
+
+    public static native void nativeSetDisplayBufferDriver(boolean on);
 
     public static native int nativeZeroCopyFrames();
 
@@ -238,12 +320,14 @@ public final class WaylandCompositor {
 
     public static native boolean nativeGamePictureRect(float[] out);
 
+    public static native boolean nativeOutputSize(int[] out);
+
     public static native void nativeResizeOutput(int width, int height);
 
     public static native void nativeResetFirstFrame();
 
 
-    public static final int HDR_MODE_OFF = 0, HDR_MODE_ON = 1, HDR_MODE_FORCE = 2;
+    public static final int HDR_MODE_OFF = 0, HDR_MODE_ON = 1, HDR_MODE_FORCE = 2, HDR_MODE_TONEMAP = 3;
 
     public static native void nativeSetHdrRequest(int mode, String source, boolean dxvkHdr, boolean zeroCopyForced);
 
@@ -300,7 +384,7 @@ public final class WaylandCompositor {
     public static native void nativeSetDeband(boolean enabled, int strength);
 
     public static native void nativeSetScreenEffects(float brightness, float contrast, float gamma, float saturation,
-                                                     boolean fxaa, boolean toon, boolean crt, boolean ntsc);
+                                                     int aaMode, boolean toon, boolean crt, boolean ntsc);
 
     public static native void nativeSetLookName(String name);
 
@@ -317,6 +401,10 @@ public final class WaylandCompositor {
 
     public static native void nativeSetFpsLimit(int fps);
 
+    public static native void nativeSetBlackFrameInsertion(boolean on);
+
+    public static native void nativeSetPictureHold(boolean on);
+
     public static native void nativeSetRenderOnCommit(boolean on);
 
     public static native void nativeSetGpuTurbo(boolean on);
@@ -324,6 +412,9 @@ public final class WaylandCompositor {
     public static native int nativeRaisePriority(int tid, int nice);
 
     public static native void nativeSendSceneInput(int type, int a, int b);
+
+    public static final int SCENE_BUTTON = 3, SCENE_WHEEL = 4, SCENE_POINTER_DELTA = 6, SCENE_AXIS = 11, SCENE_AXIS_FINGER = 12;
+    public static final int WHEEL_STEP_UNITS = 120, POINTER_DELTA_SCALE = 256;
 
     public static final int FG_ENGINE_LSFG = 0, FG_ENGINE_DDFG = 1;
 
@@ -353,19 +444,19 @@ public final class WaylandCompositor {
 
     public static void sendPointerDelta(int dx, int dy) {
         if (dx == 0 && dy == 0) return;
-        nativeSendSceneInput(6, dx * 256, dy * 256);
+        nativeSendSceneInput(SCENE_POINTER_DELTA, dx * POINTER_DELTA_SCALE, dy * POINTER_DELTA_SCALE);
     }
 
     private static float pendingDeltaX, pendingDeltaY;
 
     public static void sendPointerDelta(float dx, float dy) {
-        pendingDeltaX += dx * 256f;
-        pendingDeltaY += dy * 256f;
+        pendingDeltaX += dx * POINTER_DELTA_SCALE;
+        pendingDeltaY += dy * POINTER_DELTA_SCALE;
         int x = (int) Math.floor(pendingDeltaX);
         int y = (int) Math.floor(pendingDeltaY);
         if (x == 0 && y == 0) return;
         pendingDeltaX -= x;
         pendingDeltaY -= y;
-        nativeSendSceneInput(6, x, y);
+        nativeSendSceneInput(SCENE_POINTER_DELTA, x, y);
     }
 }

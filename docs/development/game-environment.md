@@ -212,6 +212,12 @@ more, so its fix removes both variables, also from its launch options, and sets
 `vk_x11_strict_image_count=true`, the option Mesa's driconf gives the game. A
 per-game value in the environment editor still wins.
 
+Dragon Quest Monsters 4 does not draw slime bodies at its default monster mesh
+detail, leaving only their tips. Before each launch, DroidDeck sets
+`r.SkeletalMeshLODBias=-4` and `r.SkeletalMeshLODRadiusScale=0.25` under
+`[SystemSettings]` in the game's `Engine.ini`. It does this every time because the
+game ignores `-ini:` overrides and deletes a writable `Engine.ini` after reading it.
+
 ## Defaults and available suggestions
 
 The initial configuration enables Mesa shader caching with
@@ -283,10 +289,21 @@ DroidDeck instead publishes an atomic JSON snapshot at
 `/root/.config/droiddeck/game-environment.json`. Both its Valve ARM64 Proton
 wrapper and adopted third-party Proton wrappers execute `droiddeck-game-env`,
 which reads that snapshot for each real game launch and uses `execvpe` to start
-Proton. Probe prefix `compatdata/0` and non-launch verbs are unchanged. Malformed
+Proton. Probe prefix `compatdata/0` and non-launch verbs are unchanged. A game launch
+adds `tabtip.exe=d` to `WINEDLLOVERRIDES` unless the launch has `SteamDeck=1`
+or the overrides already set `tabtip.exe` (also as `*tabtip.exe` or
+`tabtip.exe.dll`): Proton's tabtip only opens Steam's
+keyboard with `SteamDeck=1`, but it always runs UI Automation queries inside the
+focused game, which crash games that answer them (Godot 4.5 AccessKit). Malformed
 configuration falls back to the inherited environment without evaluating its
 contents. Both component and environment selection normalize signed non-Steam
 prefix IDs to unsigned IDs.
+
+A Dragon's Dogma 2 launch (Steam app 2054970) appends the game's own
+`/WineDetectionEnabled:False` switch: the game checks for Wine and its Wine path
+does not start. The switch is added only at launch, never to Steam's stored
+Launch Options, and a user's own `/WineDetectionEnabled:` value in Launch
+Options keeps priority and is not repeated.
 
 The published file also carries generated `dxvkConfig` and `dxvkConfigGames`
 values the app's own file never has. The session menu's texture filtering

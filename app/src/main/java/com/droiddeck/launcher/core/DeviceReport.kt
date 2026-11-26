@@ -207,9 +207,11 @@ object DeviceReport {
         k("refresh_rate_mode", runCatching { Settings.Secure.getString(context.contentResolver, "refresh_rate_mode") }.getOrNull() ?: "not set")
         val panelSize = com.droiddeck.launcher.session.SessionDisplay.panelSize(context)
         for ((label, mode) in listOf("Resolution (Steam)" to SessionService.MODE_STEAM, "Resolution (Desktop)" to SessionService.MODE_DESKTOP)) {
-            val choice = SessionPrefs.resolutionChoice(context, mode, panelSize)
-            val size = com.droiddeck.launcher.session.SessionDisplay.resolveChoice(panelSize, choice)
-            k(label, "$choice (${size.first}x${size.second})")
+            for ((suffix, portrait) in listOf("landscape" to false, "portrait" to true)) {
+                val choice = SessionPrefs.resolutionChoice(context, mode, panelSize, portrait)
+                val size = com.droiddeck.launcher.session.SessionDisplay.resolveChoice(panelSize, choice, portrait)
+                k("$label $suffix", "$choice (${size.first}x${size.second})")
+            }
         }
         k("Foldable", context.packageManager.hasSystemFeature("android.hardware.sensor.hinge_angle"))
 
@@ -233,6 +235,10 @@ object DeviceReport {
             else "${turnip.displayName(displayId)} ${turnip.driverVersion(displayId)}".trim()
         k("Display driver (chosen)", if (androidChoice.isEmpty()) "Auto -> $displayLabel" else androidChoice)
         k("  name / version", displayLabel)
+        turnip.effectiveId().takeIf { it != displayId }?.let { used ->
+            k("  in use", if (used == "system") DeviceInfo.builtinDriverLabel(SystemVulkanDriver.isPowerVr(), runtime = false)
+                else "${turnip.displayName(used)} ${turnip.driverVersion(used)}".trim())
+        }
         k("  imported available", turnip.enumerateImported().ifEmpty { listOf("none") }.joinToString(", "))
         val lm = LinuxVulkanDriverManager(context)
         run {
@@ -242,7 +248,9 @@ object DeviceReport {
                 lm.getMinGlibc(id).let { if (it.isEmpty()) "" else " (glibc $it+)" } +
                 if (lm.isInstalled(id)) "" else if (SystemVulkanDriver.isPowerVr()) "  [MISSING - select an installed driver or Auto]"
                 else "  [MISSING - falls back to the runtime's own]"
-            k("Linux driver", label)
+            val route = DeviceInfo.hostRoute(context)
+            k("Linux driver", route ?: label)
+            if (route != null) k("  chosen, not used", label)
         }
         k("Runtime's own ICD", LinuxRuntime.vulkanIcd(context)?.path)
         k("Mali (Venus)", if (com.droiddeck.launcher.session.VenusComponent.wanted(context)) "in use"
@@ -275,9 +283,6 @@ object DeviceReport {
         k("Linux x86 (FEX)", if (com.droiddeck.launcher.runtime.LinuxFex.ready(context)) "ready" else "not set up")
         k("gamescope realtime", SessionPrefs.gamescopeRealtime(context))
         k("pace cores", SessionPrefs.paceCores(context))
-        k("zRAM: compress Steam during games", SessionPrefs.zramClient(context))
-        k("RAM cap", SessionPrefs.ramCapMb(context).let { if (it > 0) "$it MB" else "off" })
-        k("VRAM cap", SessionPrefs.vramCapMb(context).let { if (it > 0) "$it MB" else "driver default" })
         k("proot without seccomp", SessionPrefs.prootNoSeccomp(context))
         k("native userland (no proot)", SessionPrefs.nativeUserland(context))
         k("proot fast path", SessionPrefs.prootFastPath(context))
@@ -286,10 +291,14 @@ object DeviceReport {
         k("Guest host name", SessionPrefs.guestHostname(context))
         k("DirectAudio for games", SessionPrefs.directAudio(context))
         k("Stretch 16:9 to panel", SessionPrefs.stretch16x9(context))
+        k("Avoid notch", SessionPrefs.avoidNotch(context))
         k("Return to launcher after a game", SessionPrefs.returnAfterGame(context))
+        k("Valve Proton only when needed", SessionPrefs.valveProtonOnDemand(context))
         k("Microphone", SessionPrefs.micEnabled(context))
         k("On-screen controls", SessionPrefs.oscMode(context))
         k("Touch mode", SessionPrefs.touchMode(context))
+        k("Pen mode", SessionPrefs.penMode(context))
+        k("Pen side button", SessionPrefs.penButton(context))
         k("Performance HUD", SessionPrefs.hudEnabled(context))
         k("Game storage", when (val g = SessionPrefs.gameStorage(context)) {
             "" -> "automatic (" + (com.droiddeck.launcher.session.GameStorage.effective(context)?.path ?: "no card present") + ")"

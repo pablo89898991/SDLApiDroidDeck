@@ -32,6 +32,16 @@ sees the **real controller**, exactly as if it were plugged into a PC.
 - **Floating bubble**: tap to switch the SDL3 driver on or off, double tap for Steam Native Hook-up.
 - **Works on the desktop too**: every mode (present-as types and Hook-up) also works with Steam on DroidDeck's
   desktop, set up like a PC.
+- **Windows components for desktop programs**: right-click any Windows program on the desktop -> Windows
+  Components... to add Visual C++ runtimes, DirectX extras, .NET, XNA and more to its prefix.
+- **Wine without Steam**: Windows programs start even if Steam was never installed or signed in. DroidDeck
+  downloads its own Wine (DroidDeck-Proton: Wine 11 + FEX) once when Steam's Proton isn't there.
+- **Wine menu on the desktop**: install Windows programs into a shared C: drive, start them from Wine -> Programs,
+  and open Wine Configuration, Registry Editor, Uninstall Programs, Command Prompt and more.
+- **Settings -> Wine**: see the installed and newest Wine (Proton), update it, check now, or turn automatic updates
+  off.
+- **Easy Anti-Cheat games start offline** even when their anti-cheat launcher has another name (instead of "Failed
+  to initialize Wine helper buffer"). Online modes that need Easy Anti-Cheat stay unavailable.
 - **Auto-sync**: rebuilt on the newest upstream DroidDeck every day.
 
 ---
@@ -122,6 +132,50 @@ through Steam: add them to Steam as non-Steam games, or use Steam's Desktop Conf
 Like on a PC, Steam applies its **Desktop Layout** (mouse on a stick or trackpad, keys on buttons) to the controllers
 it drives while no game runs. Desktop programs also see a presented controller as an Xbox 360 pad, so both act at
 once. Turn the Desktop Layout off or change it in Steam's controller settings if you don't want that.
+
+### Windows components for desktop programs
+
+Windows programs on the desktop run with Proton (DroidDeck's Wine), each in its own prefix. To give one the runtimes
+it needs:
+
+1. In the file manager, right-click the `.exe` or `.msi` -> **Windows Components...**
+2. DroidDeck's Windows components window opens over the desktop for that program's prefix: the same catalog,
+   recommendations and downloads as a game's settings (Visual C++ runtimes, DirectX extras, .NET, XNA, fonts...).
+3. Pick what it needs. The components are added the next time the program starts, so close it first if it's
+   running.
+
+The picks belong to the prefix, so a Steam game's are the same as in its game settings. Use touch in the window:
+the bridged controller keeps driving the desktop meanwhile.
+
+### Wine without Steam
+
+Windows programs normally use the ARM64 Proton that Steam downloads. Now they don't need Steam at all: when
+Steam's Proton isn't there (Steam never installed, not signed in, or not downloaded yet), DroidDeck uses its own
+**DroidDeck-Proton** (Wine 11 with FEX). If it isn't installed yet, it's downloaded once (a notification shows it,
+about 4 GB free space needed) and the program starts when it's ready. This also covers a game's "Start without
+Steam". When Steam's Proton is there, Steam's choices are used as before.
+
+### Wine menu
+
+The desktop's application menu has a **Wine** folder:
+
+- **Install a Windows Program...**: pick an installer; it goes into Wine's shared **C: drive**. You can also
+  right-click an installer in the file manager -> **Run in Wine's C: Drive**.
+- **Programs**: everything the installers added to the Start menu.
+- **C: Drive**: opens the shared C: drive in the file manager.
+- **Wine Configuration**, **Registry Editor**, **File Manager**, **Command Prompt**, **Task Manager**,
+  **Uninstall Programs**, **Game Controllers**.
+- **Windows Components**: Visual C++, DirectX, .NET, XNA and more for the shared C: drive.
+- **Update Wine**: gets the newest DroidDeck-Proton, even while the desktop runs.
+
+The shared C: drive is separate from every game's own prefix.
+
+### Settings -> Wine
+
+DroidDeck's **Settings** have a **Wine** tab to keep Wine (Proton) up to date: the installed and newest version of
+DroidDeck-Proton (and GE-Proton / Proton-CachyOS if installed), **Install** / **Update**, **Check now**, and
+**Update automatically** (on by default; turn it off to update only when you tap Update). Updates wait until no
+session runs; on the desktop use Wine -> Update Wine. Steam's own Proton is updated by Steam.
 
 ## Steam Controller (2026) over cable or puck
 
@@ -227,7 +281,7 @@ report at a time), with no taps lost instead of up to 4 in 10. When Steam reads 
 - **Steam started with `+controller_rate 500`**.
 - **Steam Input mouse clicks reach games**: upstream's Remote Play touch shim dropped every mouse click Steam
   sends (it couldn't find the real XTest function, which Steam loads privately). Fixed for every controller and
-  mode; keys and mouse movement were never affected.
+  mode; keys and mouse movement were never affected. Upstream now has the same fix, so it's kept as theirs.
 - **Controller-driven mouse works out of the box**: "Draw the cursor inside gamescope" (Performance -> Session
   fixes) starts on, so buttons bound to mouse clicks in Steam Input work. Turn it off for a little more speed if
   you never use controller mouse bindings.
@@ -281,7 +335,8 @@ report at a time), with no taps lost instead of up to 4 in 10. When Steam reads 
 - **One source for the bridge**: the sync takes the bridge's code and the patch script straight from the
   [SdlBridge](https://github.com/pablo89898991/SdlBridge) repo, so a change pushed there is in the next build.
   Run *Sync upstream + SDL3 bridge* by hand to build it right away.
-- **SDL3** comes from its pinned release (`droiddeck/sdl3.env` in SdlBridge, SHA-256 checked) and is built into
+- **SDL3** comes from its pinned release (`droiddeck/sdl3.env` in SdlBridge, SHA-256 checked; SdlBridge's "SDL update"
+  workflow moves the pin to each new stable SDL3 release after testing it) and is built into
   the APK. The bridge runs in its own process inside the app (`:sdl3`), so a controller-driver crash can't take your
   Steam session down.
 - **Signing**: built by upstream's own workflow and signed with its test key, like SDL3Deck, so each build installs
@@ -290,11 +345,14 @@ report at a time), with no taps lost instead of up to 4 in 10. When Steam reads 
 ### Setting the repo up (once)
 
 - `main` holds this README, `LICENSE`, `.github/workflows/sync.yml` (the daily sync), `.github/workflows/build.yml`
-  (only so *Build APK* can be started on the build branch) and `.github/workflows/publish.yml` (each successful build
-  becomes a release with `SDL3DroidDeck.apk`; the newest 10 are kept). The APK is built on `sdl3droiddeck`, which the
-  sync fills.
+  (only so *Build APK* can be started on the build branch), `.github/workflows/publish.yml` (each successful build
+  becomes a release with `SDL3DroidDeck.apk`; the newest 10 are kept) and `.github/workflows/retry-build.yml` (a build
+  that failed only on a download -- e.g. Maven Central's "429 Too Many Requests", which it gives GitHub's shared
+  runners now and then -- is re-run by itself, up to twice, a few minutes apart). The APK is built on
+  `sdl3droiddeck`, which the sync fills.
 - Repo secret `SYNC_PAT`: a GitHub token with **repo** + **workflow** scope (GitHub doesn't let the built-in token
-  push workflow files). Optional: `DOCKERHUB_USER` / `DOCKERHUB_TOKEN`, so the build pulls its Debian image from
+  push workflow files). Tokens expire (classic ones after 30 days by default): when it does, the sync's first step
+  says so -- regenerate it at github.com/settings/tokens and paste the new value into the secret. Optional: `DOCKERHUB_USER` / `DOCKERHUB_TOKEN`, so the build pulls its Debian image from
   Docker Hub signed in.
 - Then *Actions → Sync upstream + SDL3 bridge → Run workflow*. It runs daily after that.
 

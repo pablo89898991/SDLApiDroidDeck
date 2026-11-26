@@ -1,0 +1,103 @@
+# Retries a "Build APK" run on the build branch that failed only because a download was refused or cut off. Maven
+# Central limits how much GitHub's shared runners may download, so a build now and then stops on a library with
+# "429 Too Many Requests" through no fault of the code; network hiccups (timeouts, resets, 5xx) look the same. Such a
+# run gets its failed jobs re-run (with the jobs after them), a few minutes later, up to TRIES more times. A real
+# failure -- a test, a compile error, a patch that no longer fits -- is left alone, so GitHub reports it as before.
+# A retried build that succeeds is published (Publish release); a re-run started by a workflow may not start it.
+name: Retry Build APK
+
+on:
+  workflow_run:
+    workflows: ["Build APK"]
+    types: [completed]
+    branches: [sdl3droiddeck]
+
+permissions:
+  actions: write    # re-run failed jobs, read their logs, start Publish release
+  contents: read
+
+env:
+  BUILD_BRANCH: sdl3droiddeck
+  TRIES: 2          # retries after the first attempt
+  WAIT: 180         # seconds before each retry (rate limits wear off)
+
+jobs:
+  retry:
+    # Only the first attempt: later attempts are this job's own retries or yours (Re-run jobs).
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN: ${{ github.event.workflow_run.id }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Re-run it if only a download failed
+        run: |
+          set -uo pipefail
+          api() { gh api "$@"; }
+          # A failed job whose log has a line that fetches something (a URL, curl, git, Gradle) and failed for a
+          # reason that passes by itself. Script lines GitHub echoes (cyan) are not output: skipped.
+          fetch='https?://|curl: \(|RPC failed|early EOF|Could not (GET|HEAD|download)|failed to download|dial tcp'
+          passing='status code (408|425|429|5[0-9][0-9])|Too Many Requests|returned error: (408|429|5[0-9][0-9])|timed out|[Tt]imeout|reset by peer|Connection reset|Temporary failure in name resolution|Could not resolve host|[Hh]andshake|RPC failed|early EOF|unexpected disconnect|Service Unavailable|Bad Gateway|ECONNRESET|ETIMEDOUT|EAI_AGAIN'
+          download_failure() {  # $1 = attempt; prints what it found, true when a download failed
+            local jobs found=1 id name lines
+            jobs=$(api "repos/$GH_REPO/actions/runs/$RUN/attempts/$1/jobs?per_page=100" \
+              --jq '.jobs[] | select(.conclusion == "failure") | "\(.id)\t\(.name)"') || return 1
+            while IFS=$'\t' read -r id name; do
+              [ -n "$id" ] || continue
+              lines=$(api "repos/$GH_REPO/actions/jobs/$id/logs" 2>/dev/null | grep -v $'\e\\[36;1m' |
+                grep -E "$fetch" | grep -E "$passing" | head -3)
+              if [ -n "$lines" ]; then
+                echo "$name: a download failed:"
+                printf '%s\n' "$lines" | cut -c1-300 | sed 's/^/    /'
+                found=0
+              fi
+            done <<< "$jobs"
+            return $found
+          }
+          state() { api "repos/$GH_REPO/actions/runs/$RUN" --jq '"\(.run_attempt) \(.status) \(.conclusion // "-")"'; }
+
+          echo "Build APK run $RUN failed on ${SHA:0:7}"
+          if ! download_failure 1; then
+            echo "It failed for another reason (no failed download): not retried."
+            exit 0
+          fi
+          for try in $(seq 1 "$TRIES"); do
+            echo "Retry $try of $TRIES in ${WAIT}s"
+            sleep "$WAIT"
+            head=$(api "repos/$GH_REPO/branches/$BUILD_BRANCH" --jq .commit.sha) || head=$SHA
+            if [ "$head" != "$SHA" ]; then
+              echo "$BUILD_BRANCH has moved on to ${head:0:7}: its own build replaces this one."
+              exit 0
+            fi
+            read -r before status conclusion < <(state)
+            if [ "$status" = completed ]; then
+              api -X POST "repos/$GH_REPO/actions/runs/$RUN/rerun-failed-jobs" >/dev/null ||
+                { echo "::error::could not re-run the failed jobs of run $RUN"; exit 1; }
+            else
+              before=$((before - 1))  # re-run by hand meanwhile: wait for that one
+            fi
+            for minute in $(seq 1 300); do
+              sleep 60
+              read -r now status conclusion < <(state) || continue
+              [ "$now" -gt "$before" ] && [ "$status" = completed ] && break
+            done
+            if [ "$status" != completed ]; then
+              echo "::error::attempt $now of run $RUN did not finish in time"
+              exit 1
+            fi
+            if [ "$conclusion" = success ]; then
+              echo "Attempt $now succeeded."
+              gh workflow run publish.yml --ref "${{ github.event.repository.default_branch }}" -f run_id="$RUN" ||
+                echo "::warning::could not start Publish release: run it by hand (run ID $RUN)"
+              exit 0
+            fi
+            if ! download_failure "$now"; then
+              echo "::error::Build APK attempt $now failed for another reason; see run $RUN"
+              exit 1
+            fi
+          done
+          echo "::error::Build APK still fails on downloads after $TRIES retries. Re-run it later (Re-run failed jobs)."
+          exit 1

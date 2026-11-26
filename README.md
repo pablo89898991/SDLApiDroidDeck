@@ -345,9 +345,11 @@ report at a time), with no taps lost instead of up to 4 in 10. When Steam reads 
 ### Setting the repo up (once)
 
 - `main` holds this README, `LICENSE`, `.github/workflows/sync.yml` (the daily sync), `.github/workflows/build.yml`
-  (only so *Build APK* can be started on the build branch) and `.github/workflows/publish.yml` (each successful build
-  becomes a release with `SDL3DroidDeck.apk`; the newest 10 are kept). The APK is built on `sdl3droiddeck`, which the
-  sync fills.
+  (only so *Build APK* can be started on the build branch), `.github/workflows/publish.yml` (each successful build
+  becomes a release with `SDL3DroidDeck.apk`; the newest 10 are kept) and `.github/workflows/retry-build.yml` (a build
+  that failed only on a download -- e.g. Maven Central's "429 Too Many Requests", which it gives GitHub's shared
+  runners now and then -- is re-run by itself, up to twice, a few minutes apart). The APK is built on
+  `sdl3droiddeck`, which the sync fills.
 - Repo secret `SYNC_PAT`: a GitHub token with **repo** + **workflow** scope (GitHub doesn't let the built-in token
   push workflow files). Tokens expire (classic ones after 30 days by default): when it does, the sync's first step
   says so -- regenerate it at github.com/settings/tokens and paste the new value into the secret. Optional: `DOCKERHUB_USER` / `DOCKERHUB_TOKEN`, so the build pulls its Debian image from

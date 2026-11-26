@@ -39,6 +39,25 @@ jobs:
   sync:
     runs-on: ubuntu-24.04
     steps:
+      # A token that has expired or been revoked only shows up later as git's "could not read Username": say so here
+      - name: Check the SYNC_PAT token
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::This repo has no SYNC_PAT secret. Make a GitHub token (classic: repo + workflow) and add it under Settings -> Secrets and variables -> Actions as SYNC_PAT."
+            exit 1
+          fi
+          if ! gh api user --silent 2>/dev/null; then
+            echo "::error::GitHub rejects the SYNC_PAT token: it has expired or was revoked. Regenerate it (github.com/settings/tokens, scopes repo + workflow) and paste the new value into Settings -> Secrets and variables -> Actions -> SYNC_PAT."
+            exit 1
+          fi
+          if ! gh api "repos/$GITHUB_REPOSITORY" --jq .permissions.push 2>/dev/null | grep -qx true; then
+            echo "::error::The SYNC_PAT token can't push to $GITHUB_REPOSITORY: give it the repo (and workflow) scope, or access to this repository."
+            exit 1
+          fi
+          echo "SYNC_PAT works."
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
